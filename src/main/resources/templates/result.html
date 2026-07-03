@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/page :: head('Newsletter Pipeline — Result')}"></head>
+<body>
+    <h1>Pipeline result</h1>
+    <p class="job">Job <span th:text="${result.jobId()}">id</span></p>
+
+    <!-- Agent #1 output -->
+    <div class="stage">
+        <h2>Agent #1 — Document Ingestion <span class="badge" th:text="|${result.documents().size()} document(s)|">0</span></h2>
+        <table th:if="${!result.documents().isEmpty()}">
+            <thead>
+                <tr><th>File</th><th>Type</th><th>Blocks</th><th>Headings</th><th>Text</th><th>Tables</th><th>Images</th></tr>
+            </thead>
+            <tbody>
+                <tr th:each="doc : ${result.documents()}">
+                    <td th:text="${doc.filename()}">file</td>
+                    <td th:text="${doc.type()}">TYPE</td>
+                    <td th:text="${doc.totalBlocks()}">0</td>
+                    <td th:text="${doc.headings()}">0</td>
+                    <td th:text="${doc.textBlocks()}">0</td>
+                    <td th:text="${doc.tables()}">0</td>
+                    <td th:text="${doc.images()}">0</td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="empty" th:if="${result.documents().isEmpty()}">No documents were ingested.</p>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #2 output -->
+    <div class="stage">
+        <h2>Agent #2 — Content Understanding <span class="badge" th:text="|${result.contentItems().size()} item(s)|">0</span></h2>
+        <table th:if="${!result.contentItems().isEmpty()}">
+            <thead>
+                <tr><th>Title</th><th>Category</th><th>Type</th><th>Summary</th><th>Key metrics</th><th>Sources</th></tr>
+            </thead>
+            <tbody>
+                <tr th:each="item : ${result.contentItems()}">
+                    <td><strong th:text="${item.title()}">title</strong></td>
+                    <td><span class="cat" th:text="${item.category()}">category</span></td>
+                    <td class="type" th:text="${item.type()}">TYPE</td>
+                    <td th:text="${item.summary()}">summary</td>
+                    <td class="metrics" th:text="${#strings.listJoin(item.keyMetrics(), ', ')}">metrics</td>
+                    <td th:text="${item.sources()}">0</td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="empty" th:if="${result.contentItems().isEmpty()}">
+            No content items were produced (check that Ollama is running).
+        </p>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #3 output -->
+    <div class="stage" th:with="plan=${result.plan()}">
+        <h2>Agent #3 — Content Planning
+            <span class="badge" th:if="${plan != null}"
+                  th:text="|${plan.sections().size()} section(s)|">0</span>
+        </h2>
+
+        <th:block th:if="${plan != null}">
+            <p class="issue-title" th:text="${plan.issueTitle()}">Issue title</p>
+
+            <div class="section" th:each="section : ${plan.sections()}">
+                <h3 th:text="${section.title()}">Section</h3>
+                <p class="placeholder" th:if="${section.items().isEmpty()}">
+                    Written by the Content Generation agent (no source items).
+                </p>
+                <table th:if="${!section.items().isEmpty()}">
+                    <thead>
+                        <tr><th>Title</th><th>Score</th><th>Rationale</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="item : ${section.items()}">
+                            <td><strong th:text="${item.title()}">title</strong></td>
+                            <td><span class="score" th:text="${item.score()}">5</span></td>
+                            <td class="rationale" th:text="${item.rationale()}">why</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="empty" th:if="${plan.sections().isEmpty()}">
+                Nothing made the issue — no content items were available to plan.
+            </p>
+
+            <details class="deferred" th:if="${!plan.deferredItems().isEmpty()}">
+                <summary th:text="|${plan.deferredItems().size()} item(s) deferred (scored too low or section full)|">deferred</summary>
+                <table>
+                    <thead>
+                        <tr><th>Title</th><th>Category</th><th>Score</th><th>Rationale</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="item : ${plan.deferredItems()}">
+                            <td th:text="${item.title()}">title</td>
+                            <td><span class="cat" th:text="${item.category()}">category</span></td>
+                            <td><span class="score low" th:text="${item.score()}">2</span></td>
+                            <td class="rationale" th:text="${item.rationale()}">why</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </details>
+        </th:block>
+
+        <p class="empty" th:if="${plan == null}">The planning agent did not run.</p>
+    </div>
+
+    <a th:replace="~{fragments/page :: back}"></a>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- Shared page fragments: every view pulls its <head> (and footer) from here so
+     styling and metadata stay consistent across the UI. -->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title th:text="${title}">Newsletter Pipeline</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}"/>
+</head>
+<body>
+    <a th:fragment="back" class="back" href="/">&#8592; Run another</a>
+</body>
+</html>

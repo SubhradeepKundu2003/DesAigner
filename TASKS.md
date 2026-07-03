@@ -35,6 +35,81 @@ field `files`) accepts xlsx/docx/pdf/pptx, extracts them into the shared
 `document/` model, stores originals + images under `storage/jobs/{jobId}/...`,
 and returns a per-document block-count summary.
 
+Agent #2 (Content Understanding) is built, compiles, and is **verified live
+end-to-end** through the real Spring app (booted on port 8091 against local
+Postgres + Ollama): `POST /api/ingest` on a sample `.docx` returned a correctly
+classified `contentItems` array (title, category, type, metrics, provenance) —
+not just a direct Ollama probe. Also verified via the temporary Thymeleaf UI
+(`GET /` upload form → `POST /run` → `result.html` shows both agents' output).
+
+Agent #3 (Content Planning) is built, compiles, and is **verified live e2e**
+(booted on port 8091, Postgres + Ollama): `POST /api/ingest` on the sample
+`.docx` returned a `plan` block — issue title "TD Monthly Newsletter — July
+2026", a Leadership Message placeholder section, and Delivery Highlights with
+the item scored 9/10 plus rationale. Also verified through the web UI
+(`POST /run` → result page renders the plan) and the error page renders for
+`Accept: text/html`.
+
+**Agent #3 facts:**
+- Package `agent/planning/`: `ContentPlanningAgent` (`@Order(3)`),
+  `NewsletterSection` enum (declaration order = final reading order; maps 1:1
+  from `BusinessCategory`; `LEADERSHIP_MESSAGE` has no source category and is
+  planned with an empty item list for the generation agent to write;
+  `IN_OTHER_NEWS` catches `OTHER`), `PlannedItem` (item + score 1–10 +
+  rationale), `SectionPlan`, `NewsletterPlan` (issueTitle, sections in order,
+  deferredItems), `ScoredItem` (LLM DTO — bare array, per the extractJson
+  lesson), `PlanningPrompts`.
+- Design: **one LLM call scores all items** (numbered list in, `ScoredItem[]`
+  out, matched back by index, clamped 1–10); selection/ordering is
+  **deterministic Java** — score < `app.planning.min-score` (default 4) →
+  deferred; per-section cap `app.planning.max-items-per-section` (default 5),
+  overflow deferred; sections emitted in `NewsletterSection` enum order. If the
+  scoring call fails entirely, every item gets a neutral score 5 so the run
+  still produces a plan.
+- `PipelineContext` now carries `NewsletterPlan` (get/setNewsletterPlan; null
+  until agent #3 runs). `IngestionResponse` gained a `plan` field
+  (PlanSummary → SectionSummary/PlannedItemSummary).
+- Note: the small model sometimes returns an empty `rationale` — handled
+  (nulls stripped to ""), don't rely on it downstream.
+
+**Thymeleaf is now properly integrated (no longer "temporary"):**
+- Shared fragments in `templates/fragments/page.html` (`head(title)` fragment +
+  `back` link); all styling moved to `static/css/app.css`; `templates/error.html`
+  replaces the whitelabel error page (`server.error.include-message: always`
+  set for dev). `result.html` shows all three agents' output; `index.html`
+  lists the three-agent chain. Thymeleaf stays as the templating engine for the
+  Layout & Design agent's HTML newsletter later (see pom comment).
+
+**AI layer facts:**
+- Provider-agnostic LLM boundary lives in `llm/`: `LlmClient` interface
+  (`generate(system,user)` + `generate(system,user,Class<T>)` structured) and
+  `SpringAiLlmClient` (wraps Spring AI `ChatClient`; injects the autoconfigured
+  `ChatModel`). Agents depend only on `LlmClient` — swap providers via config.
+- Spring AI **2.0.0** (BOM import in `pom.xml`, aligns with Boot 4.x);
+  `spring-ai-starter-model-ollama`. Config in `application.yaml` under `spring.ai.ollama`
+  (base-url, chat model `qwen3.5:4b`, embed model `nomic-embed-text`,
+  `init.pull-model-strategy: never`).
+- **`spring.ai.ollama.chat.think: false`** — qwen3.5 is a reasoning model;
+  thinking + JSON was ~6x slower (148s vs 24s/doc) with no quality gain. This
+  property is the only clean lever (`OllamaOptions` has no `think` setter).
+  Verified binding live: warm calls now complete in ~30s.
+- **Structured output cannot rely on Spring AI's `.entity()`/`BeanOutputConverter`
+  cleanup alone** — this local model does not reliably return clean JSON. Observed
+  live: (a) a bare JSON array instead of the requested wrapper object → target
+  type changed to `ExtractedItem[]`; (b) the raw completion sometimes contains
+  *two* JSON payloads back-to-back (one bare, one re-stated inside a ```json
+  fence) → a naive "first `[` to last `]`" span swallows the fence in between and
+  breaks parsing. Fixed in `SpringAiLlmClient.extractJson` with a string-aware
+  bracket-depth scanner that returns only the *first complete* JSON value and
+  ignores anything after it. This lives in the provider wrapper, so every
+  structured-output agent benefits, not just Agent #2.
+- `PipelineContext` carries `List<ContentItem>` (add/get). `POST /api/ingest`
+  runs the whole chain; the response includes `contentItems` and `plan`.
+- **Web UI:** `PipelineService` (in `orchestrator/`) is the shared store-and-run
+  path used by both `IngestionController` (JSON API) and `PipelineViewController`
+  (`web/`) + `templates/index.html` (upload form) / `templates/result.html`
+  (all agents' output). `spring-boot-starter-thymeleaf` in `pom.xml`.
+
 **Key facts for continuing:**
 - App runs on a user-managed instance (port 8090 in last session). Local Postgres
   DB `contentgenerator`, user `postgres`, password `root` (env-overridable:
@@ -49,25 +124,30 @@ and returns a per-document block-count summary.
 - **Each agent = its own package** under `agent/`. Ingestion is `agent/ingestion/`.
 - **AI not wired yet** — Spring AI + Ollama starter still needs adding (Phase 0).
 
-**Not done:** Agent #1 automated unit tests; DB persistence of results (in-memory
-only, returned in HTTP response); Agents #2–#10.
+**Not done:** Agents #1–#3 automated unit tests; DB persistence of results
+(in-memory only, returned in HTTP response); Agents #4–#10.
 
-**Next up → Agent #2 (Content Understanding):** first agent that calls the LLM.
-Reads the `List<DocumentModel>` from `PipelineContext`, identifies projects /
-achievements / events / metrics / announcements / milestones, classifies into
-business categories, de-duplicates, and appends structured `ContentItem`s back to
-the context. Lives in a new `agent/understanding/` package. Add the Spring AI
-Ollama starter + a provider-agnostic LLM interface as part of this.
+**Next up → Agent #4 (Content Generation):** reads
+`context.getNewsletterPlan()`, generates article bodies/titles/summaries per
+section (including writing the Leadership Message placeholder section, which has
+no source items), keeps a consistent corporate tone via a shared system prompt.
+New `agent/generation/` package. Any future agent doing structured LLM output
+should target a shape that matches what the model naturally emits (arrays for
+lists, not a wrapper object) — see the `extractJson` note above before assuming
+`.entity()` alone is reliable with this model. Also note this small model may
+leave optional string fields (e.g. `rationale`) empty — always null-guard.
 
 ---
 
 ## Phase 0 — Foundation & Setup
 
 - [x] Decide LLM provider + framework → **Ollama (local) + Spring AI**.
-- [ ] Add Spring AI BOM + `spring-ai-starter-model-ollama` to `pom.xml`.
-- [ ] Configure Ollama in `application.yaml`: base URL (`http://localhost:11434`),
-      chat model (`qwen3.5:4b`), embedding model (`nomic-embed-text`).
-- [ ] Verify Ollama is running (`ollama serve`) and the app can reach it (health check).
+- [x] Add Spring AI BOM + `spring-ai-starter-model-ollama` to `pom.xml` (Spring AI 2.0.0).
+- [x] Configure Ollama in `application.yaml`: base URL (`http://localhost:11434`),
+      chat model (`qwen3.5:4b`), embedding model (`nomic-embed-text`), `think: false`.
+- [x] Verify Ollama is running and reachable — confirmed via a full live
+      `POST /api/ingest` run through the booted Spring app (not just a direct
+      Ollama probe): `qwen3.5:4b` returned correctly classified content items.
 - [ ] Add document-parsing deps: Apache POI (xlsx/docx/pptx), Apache PDFBox (pdf),
       optionally Apache Tika as a unified fallback extractor.
 - [ ] Add a PDF/HTML rendering dep for export (e.g. openhtmltopdf / Flying Saucer),
@@ -143,21 +223,44 @@ images + metadata; store originals & extracted images on local filesystem behind
       2 text, 1 table) both returned HTTP 200 with correct block counts; input
       files persisted under `storage/jobs/{jobId}/inputs/`.
 
-### 3.2 Content Understanding Agent
-- [ ] LLM prompt to identify projects, achievements, events, metrics, announcements,
+### 3.2 Content Understanding Agent  — DONE (live e2e verified)
+**Package `agent/understanding/`:** `ContentUnderstandingAgent` (`@Order(2)`),
+`ContentItem` (record) + `BusinessCategory`/`ItemType` enums (lenient parsing),
+`DocumentTextRenderer` (blocks→plain text, table rows capped), `ExtractedItem`
+(LLM JSON DTO — the model is asked for a bare array of these, not a wrapper
+object), `UnderstandingPrompts`, `ContentDeduplicator` (title-normalized merge,
+unions sources/metrics — semantic/embedding dedup is a later upgrade).
+Per-document LLM failures are caught and skipped so one bad doc can't abort a run.
+
+- [x] LLM prompt to identify projects, achievements, events, metrics, announcements,
       milestones.
-- [ ] Classify into business categories (Project Updates, Awards & Recognition,
+- [x] Classify into business categories (Project Updates, Awards & Recognition,
       Training & Learning, Delivery Highlights, Customer Success, Technology
       Initiatives, Events).
-- [ ] De-duplicate overlapping items.
-- [ ] Output structured `ContentItem`s with source references preserved.
+- [x] De-duplicate overlapping items (heuristic; embedding-based dedup later).
+- [x] Output structured `ContentItem`s with source references preserved.
+- [x] Live end-to-end run through the Spring app — `POST /api/ingest` on a real
+      `.docx` produced a correctly classified item via the booted app + Ollama.
+- [ ] Automated unit tests (currently verified manually only).
 
-### 3.3 Content Planning Agent
-- [ ] Score/prioritize items by impact.
-- [ ] Select which items make the issue; drop or defer the rest.
-- [ ] Order sections (Leadership Message → Delivery Highlights → Innovation
-      Spotlight → Customer Success → Awards & Recognition → Upcoming Events).
-- [ ] Produce a `NewsletterPlan` (section list + assigned content items).
+### 3.3 Content Planning Agent  — DONE (live e2e verified)
+**Package `agent/planning/`:** `ContentPlanningAgent` (`@Order(3)`) — one LLM
+call scores every item (bare `ScoredItem[]` array, matched by index, neutral
+fallback score on failure); deterministic Java does selection (min-score
+threshold), per-section caps, and canonical `NewsletterSection` ordering; output
+is a `NewsletterPlan` on the context (sections + deferred items). Thresholds
+config-driven under `app.planning.*`.
+
+- [x] Score/prioritize items by impact (LLM 1–10 score + rationale per item).
+- [x] Select which items make the issue; drop or defer the rest (threshold +
+      per-section cap; deferred items kept on the plan for transparency).
+- [x] Order sections (Leadership Message → Delivery Highlights → Project
+      Updates → Innovation Spotlight → Customer Success → Awards & Recognition
+      → Training & Learning → Upcoming Events → In Other News).
+- [x] Produce a `NewsletterPlan` (section list + assigned content items).
+- [x] Live end-to-end run through the Spring app — sample `.docx` produced a
+      correct plan via API and web UI.
+- [ ] Automated unit tests (currently verified manually only).
 
 ### 3.4 Content Generation Agent
 - [ ] Generate article body, titles, summaries, captions, callouts per section.

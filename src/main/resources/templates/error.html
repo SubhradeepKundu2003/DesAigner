@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<!-- Rendered by Spring Boot's error handling for any unhandled failure in the
+     web UI (replaces the whitelabel error page). -->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/page :: head('Newsletter Pipeline — Error')}"></head>
+<body>
+    <h1>Something went wrong</h1>
+
+    <div class="error-box">
+        <p class="status" th:text="${status} ?: 'Error'">500</p>
+        <p class="message" th:text="${error} ?: 'Unexpected error'">Internal Server Error</p>
+        <p class="message" th:if="${message != null and message != ''}" th:text="${message}">details</p>
+    </div>
+
+    <a th:replace="~{fragments/page :: back}"></a>
+</body>
+</html>

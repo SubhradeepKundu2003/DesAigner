@@ -22,8 +22,35 @@ spring:
       max-file-size: 50MB
       max-request-size: 200MB
 
+  # Local Ollama — no API key, nothing leaves the machine. Swap provider later by
+  # replacing the Spring AI starter + this block; app code depends only on LlmClient.
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      init:
+        # Don't auto-pull models at startup; assume `ollama pull` was run already.
+        pull-model-strategy: never
+      chat:
+        # qwen3.5 is a reasoning model; thinking + JSON output was ~6x slower
+        # (148s vs 24s per doc) with no quality gain for extraction, so disable it.
+        think: false
+        options:
+          model: ${OLLAMA_CHAT_MODEL:qwen3.5:4b}
+          temperature: 0.2
+      embedding:
+        options:
+          model: ${OLLAMA_EMBED_MODEL:nomic-embed-text}
+
 app:
   storage:
     root: ./storage
+  planning:
+    # Items scoring below min-score are deferred (not published this issue).
+    min-score: 4
+    # Each newsletter section keeps at most this many items; overflow is deferred.
+    max-items-per-section: 5
 server:
   port: 8090
+  error:
+    # Surface exception messages on the error page (dev convenience; tighten for prod).
+    include-message: always

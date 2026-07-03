@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/page :: head('Newsletter Pipeline — Run')}"></head>
+<body>
+    <h1>TD Monthly Newsletter — Pipeline</h1>
+    <p class="sub">Upload source documents and run the agent chain.</p>
+
+    <form class="upload" method="post" action="/run" enctype="multipart/form-data">
+        <label for="files"><strong>Source documents</strong> (.xlsx, .docx, .pdf, .pptx)</label>
+        <input type="file" id="files" name="files" multiple required
+               accept=".xlsx,.docx,.pdf,.pptx"/>
+        <button type="submit">Run pipeline</button>
+    </form>
+
+    <div class="agents">
+        <p>The chain runs in order:</p>
+        <ol>
+            <li><strong>Agent #1 — Document Ingestion</strong>: extracts each file into normalized blocks.</li>
+            <li><strong>Agent #2 — Content Understanding</strong>: the LLM (<code>qwen3.5:4b</code>) identifies &amp; classifies newsletter-worthy items.</li>
+            <li><strong>Agent #3 — Content Planning</strong>: scores each item's impact, selects what makes the issue, and orders the newsletter sections.</li>
+        </ol>
+        <p><em>Note: Agents #2 and #3 call a local Ollama model, so a run can take a little while per document.</em></p>
+    </div>
+</body>
+</html>
