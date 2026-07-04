@@ -24,8 +24,13 @@ public class DocumentTextRenderer {
     private static final int MAX_TABLE_ROWS = 50;
 
     public String render(DocumentModel document) {
+        return render(document.blocks());
+    }
+
+    /** Renders a span of blocks — used by {@link DocumentChunker} to render one chunk. */
+    public String render(List<DocumentBlock> blocks) {
         StringBuilder sb = new StringBuilder();
-        for (DocumentBlock block : document.blocks()) {
+        for (DocumentBlock block : blocks) {
             switch (block) {
                 case HeadingBlock h -> sb.append("#".repeat(Math.max(1, h.level())))
                         .append(' ').append(h.text()).append("\n\n");

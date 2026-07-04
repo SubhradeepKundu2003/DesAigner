@@ -2,10 +2,15 @@ package com.tcs.contentGenerator.web;
 
 import java.util.List;
 
+import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
+import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
+import com.tcs.contentGenerator.agent.generation.GeneratedSection;
 import com.tcs.contentGenerator.agent.planning.NewsletterPlan;
 import com.tcs.contentGenerator.agent.planning.PlannedItem;
 import com.tcs.contentGenerator.agent.planning.SectionPlan;
 import com.tcs.contentGenerator.agent.understanding.ContentItem;
+import com.tcs.contentGenerator.agent.validation.ValidationFlag;
+import com.tcs.contentGenerator.agent.validation.ValidationReport;
 import com.tcs.contentGenerator.document.DocumentModel;
 import com.tcs.contentGenerator.document.HeadingBlock;
 import com.tcs.contentGenerator.document.ImageBlock;
@@ -18,7 +23,9 @@ public record IngestionResponse(
         String jobId,
         List<DocumentSummary> documents,
         List<ContentItemSummary> contentItems,
-        PlanSummary plan) {
+        PlanSummary plan,
+        NewsletterSummary newsletter,
+        ValidationSummary validation) {
 
     public record DocumentSummary(
             String filename,
@@ -53,6 +60,36 @@ public record IngestionResponse(
     public record PlannedItemSummary(String title, String category, int score, String rationale) {
     }
 
+    /** The written issue: every section's articles in reading order. */
+    public record NewsletterSummary(String issueTitle, List<GeneratedSectionSummary> sections) {
+
+        public int articleCount() {
+            return sections.stream().mapToInt(s -> s.articles().size()).sum();
+        }
+    }
+
+    public record GeneratedSectionSummary(String title, List<ArticleSummary> articles) {
+    }
+
+    public record ArticleSummary(String headline, String body, String sourceTitle) {
+    }
+
+    /** The fact-check verdict: every flag raised plus the export gate state. */
+    public record ValidationSummary(
+            int articlesChecked,
+            int articlesSkipped,
+            boolean exportBlocked,
+            List<FlagSummary> flags) {
+    }
+
+    public record FlagSummary(
+            String section,
+            String article,
+            String severity,
+            String claim,
+            String issue) {
+    }
+
     public static IngestionResponse from(PipelineContext context) {
         List<DocumentSummary> summaries = context.getDocuments().stream()
                 .map(IngestionResponse::summarize)
@@ -61,7 +98,53 @@ public record IngestionResponse(
                 .map(IngestionResponse::summarize)
                 .toList();
         return new IngestionResponse(context.getJobId(), summaries, items,
-                summarize(context.getNewsletterPlan()));
+                summarize(context.getNewsletterPlan()),
+                summarize(context.getGeneratedNewsletter()),
+                summarize(context.getValidationReport()));
+    }
+
+    private static ValidationSummary summarize(ValidationReport report) {
+        if (report == null) {
+            return null;
+        }
+        List<FlagSummary> flags = report.flags().stream()
+                .map(IngestionResponse::summarize)
+                .toList();
+        return new ValidationSummary(report.articlesChecked(), report.articlesSkipped(),
+                report.exportBlocked(), flags);
+    }
+
+    private static FlagSummary summarize(ValidationFlag flag) {
+        return new FlagSummary(
+                flag.sectionTitle(),
+                flag.articleHeadline(),
+                flag.severity().label(),
+                flag.claim(),
+                flag.issue());
+    }
+
+    private static NewsletterSummary summarize(GeneratedNewsletter newsletter) {
+        if (newsletter == null) {
+            return null;
+        }
+        List<GeneratedSectionSummary> sections = newsletter.sections().stream()
+                .map(IngestionResponse::summarize)
+                .toList();
+        return new NewsletterSummary(newsletter.issueTitle(), sections);
+    }
+
+    private static GeneratedSectionSummary summarize(GeneratedSection section) {
+        List<ArticleSummary> articles = section.articles().stream()
+                .map(IngestionResponse::summarize)
+                .toList();
+        return new GeneratedSectionSummary(section.section().title(), articles);
+    }
+
+    private static ArticleSummary summarize(GeneratedArticle article) {
+        return new ArticleSummary(
+                article.headline(),
+                article.body(),
+                article.source() == null ? null : article.source().item().title());
     }
 
     private static PlanSummary summarize(NewsletterPlan plan) {

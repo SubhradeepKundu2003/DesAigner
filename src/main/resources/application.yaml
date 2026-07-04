@@ -37,6 +37,11 @@ spring:
         options:
           model: ${OLLAMA_CHAT_MODEL:qwen3.5:4b}
           temperature: 0.2
+          # Explicit context window. Ollama's default (~4K tokens) silently
+          # truncates long prompts — observed live as a huge docx collapsing to a
+          # single extracted item. Chunking (app.understanding) keeps prompts
+          # within this budget.
+          num-ctx: 8192
       embedding:
         options:
           model: ${OLLAMA_EMBED_MODEL:nomic-embed-text}
@@ -44,11 +49,24 @@ spring:
 app:
   storage:
     root: ./storage
+  understanding:
+    # Documents are analyzed one chunk at a time; ~12K chars ≈ 3K tokens, which
+    # plus prompts and the model's reply stays inside num-ctx above.
+    max-chunk-chars: 12000
+    # Safety valve for pathological documents; chunks beyond this are skipped
+    # with a warning.
+    max-chunks-per-document: 40
   planning:
     # Items scoring below min-score are deferred (not published this issue).
     min-score: 4
     # Each newsletter section keeps at most this many items; overflow is deferred.
     max-items-per-section: 5
+  validation:
+    # Export stays blocked while any unresolved flag at/above this severity exists.
+    blocking-severity: high
+    # Cap on source-material characters fed to one fact-check prompt, so the
+    # prompt (source + article) stays inside num-ctx above.
+    max-source-chars: 6000
 server:
   port: 8090
   error:

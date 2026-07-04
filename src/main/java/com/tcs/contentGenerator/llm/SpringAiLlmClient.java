@@ -45,7 +45,56 @@ public class SpringAiLlmClient implements LlmClient {
                 .user(userWithFormat)
                 .call()
                 .content();
-        return converter.convert(extractJson(raw));
+        String json = extractJson(raw);
+        try {
+            return converter.convert(json);
+        } catch (RuntimeException e) {
+            // Observed live: the local model sometimes omits the commas between
+            // array elements ("[{...} {...}]"). "} {" never occurs in valid JSON
+            // outside strings, so inserting the commas is safe; retry once.
+            String repaired = insertMissingCommas(json);
+            if (repaired.equals(json)) {
+                throw e;
+            }
+            return converter.convert(repaired);
+        }
+    }
+
+    /**
+     * Repairs a missing-comma quirk of small local models: a {@code }} or {@code ]}
+     * followed (over whitespace) by {@code {} or {@code [} outside any string
+     * literal can only be two adjacent array elements missing their separator.
+     */
+    private static String insertMissingCommas(String json) {
+        StringBuilder sb = new StringBuilder(json.length() + 16);
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            sb.append(c);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (c == '"') {
+                inString = true;
+            } else if (c == '}' || c == ']') {
+                int j = i + 1;
+                while (j < json.length() && Character.isWhitespace(json.charAt(j))) {
+                    j++;
+                }
+                if (j < json.length() && (json.charAt(j) == '{' || json.charAt(j) == '[')) {
+                    sb.append(',');
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /**

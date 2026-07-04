@@ -107,6 +107,80 @@
         <p class="empty" th:if="${plan == null}">The planning agent did not run.</p>
     </div>
 
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #4 output -->
+    <div class="stage" th:with="newsletter=${result.newsletter()}">
+        <h2>Agent #4 — Content Generation
+            <span class="badge" th:if="${newsletter != null}"
+                  th:text="|${newsletter.articleCount()} article(s)|">0</span>
+        </h2>
+
+        <th:block th:if="${newsletter != null}">
+            <p class="issue-title" th:text="${newsletter.issueTitle()}">Issue title</p>
+
+            <div class="section" th:each="section : ${newsletter.sections()}">
+                <h3 th:text="${section.title()}">Section</h3>
+                <p class="placeholder" th:if="${section.articles().isEmpty()}">
+                    No articles were written for this section.
+                </p>
+                <article class="article" th:each="article : ${section.articles()}">
+                    <h4 th:text="${article.headline()}">headline</h4>
+                    <p class="article-body" th:text="${article.body()}">body</p>
+                    <p class="article-source" th:if="${article.sourceTitle() != null}"
+                       th:text="|Source item: ${article.sourceTitle()}|">source</p>
+                </article>
+            </div>
+            <p class="empty" th:if="${newsletter.sections().isEmpty()}">
+                Nothing to write — the plan was empty.
+            </p>
+        </th:block>
+
+        <p class="empty" th:if="${newsletter == null}">The generation agent did not run.</p>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #5 output -->
+    <div class="stage" th:with="validation=${result.validation()}">
+        <h2>Agent #5 — Fact Validation
+            <span class="badge" th:if="${validation != null}"
+                  th:text="|${validation.flags().size()} flag(s)|">0</span>
+        </h2>
+
+        <th:block th:if="${validation != null}">
+            <p class="gate blocked" th:if="${validation.exportBlocked()}">
+                &#9888; Export blocked — high-severity flags must be resolved before publishing.
+            </p>
+            <p class="gate ok" th:unless="${validation.exportBlocked()}">
+                &#10003; Clear for export — no blocking issues found.
+            </p>
+            <p class="check-stats"
+               th:text="|${validation.articlesChecked()} article(s) fact-checked against their source documents, ${validation.articlesSkipped()} skipped (no source material by design).|">stats</p>
+
+            <table th:if="${!validation.flags().isEmpty()}">
+                <thead>
+                    <tr><th>Severity</th><th>Section</th><th>Article</th><th>Claim</th><th>Issue</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="flag : ${validation.flags()}">
+                        <td><span th:class="|sev ${#strings.toLowerCase(flag.severity())}|"
+                                  th:text="${flag.severity()}">Medium</span></td>
+                        <td th:text="${flag.section()}">section</td>
+                        <td th:text="${flag.article()}">article</td>
+                        <td class="claim" th:text="${flag.claim()}">claim</td>
+                        <td class="rationale" th:text="${flag.issue()}">issue</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="empty" th:if="${validation.flags().isEmpty()}">
+                Every checked claim is supported by the source documents.
+            </p>
+        </th:block>
+
+        <p class="empty" th:if="${validation == null}">The fact validation agent did not run.</p>
+    </div>
+
     <a th:replace="~{fragments/page :: back}"></a>
 </body>
 </html>

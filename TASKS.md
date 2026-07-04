@@ -72,6 +72,78 @@ the item scored 9/10 plus rationale. Also verified through the web UI
 - Note: the small model sometimes returns an empty `rationale` — handled
   (nulls stripped to ""), don't rely on it downstream.
 
+Agent #4 (Content Generation) is built, compiles, and is **verified live e2e**
+(booted on port 8091, Postgres + Ollama): `POST /api/ingest` on the small sample
+`.docx` returned a `newsletter` block — Leadership Message written from an issue
+digest (3 paragraphs, fallback headline) and a Delivery Highlights article with
+a fresh headline, the NPS 72 metric woven into the prose, and `sourceTitle`
+provenance back to the planned item.
+
+**Agent #4 facts:**
+- Package `agent/generation/`: `ContentGenerationAgent` (`@Order(4)`),
+  `GeneratedNewsletter` (issueTitle + sections, `articleCount()`),
+  `GeneratedSection`, `GeneratedArticle` (headline, body, `source` PlannedItem —
+  null only for the Leadership Message), `GenerationPrompts`.
+- Design: **one LLM call per planned item** plus one for the Leadership Message
+  (written from a digest of section titles + top story titles, since it has no
+  source items). A single shared system prompt carries the house tone.
+- **Output protocol is plain text, not JSON** — "line 1 = headline, blank line,
+  body paragraphs". Long prose inside JSON strings is where this small model
+  reliably breaks (unescaped newlines), so generation avoids JSON entirely.
+  `parse()` tolerates markdown fences, "Headline:" prefixes, quotes/`#`
+  decoration, and — observed live — the model skipping the headline and opening
+  with prose: a first line > 120 chars is reclaimed as body and the fallback
+  headline (item title / "A Message from Leadership") takes over.
+- Failure isolation per article: a failed call falls back to the item's
+  extracted title + summary, so one bad generation degrades one article, never
+  the issue. Bodies are plain paragraphs; `result.html` renders them with
+  `white-space: pre-line` (`.article-body`).
+- `PipelineContext` now carries `GeneratedNewsletter` (get/setGeneratedNewsletter;
+  null until agent #4 runs). `IngestionResponse` gained a `newsletter` field
+  (NewsletterSummary → GeneratedSectionSummary/ArticleSummary).
+
+Agent #5 (Fact Validation) is built, compiles, and is **verified live e2e**
+(booted on port 8091, Postgres + Ollama): `POST /api/ingest` on the small sample
+`.docx` returned a `validation` block — 1 article fact-checked, 1 skipped (the
+Leadership Message, no source by design), and on one run the checker caught a
+genuinely hallucinated claim ("We are already preparing updates based on their
+feedback" — HIGH severity, nothing in the source says that) which correctly
+flipped `exportBlocked: true`. The web UI (`POST /run`) renders the Agent #5
+stage with the export-gate banner (a second run produced zero flags → "clear
+for export" branch verified too; flag output varies run to run, small model).
+
+**Agent #5 facts:**
+- Package `agent/validation/`: `FactValidationAgent` (`@Order(5)`),
+  `ValidationSeverity` (LOW→MEDIUM→HIGH, lenient `fromLabel` falls back to
+  MEDIUM, `meetsOrExceeds` for the gate), `ValidationFlag` (section + article
+  headline + claim + severity + issue), `ValidationReport` (flags, checked,
+  skipped, exportBlocked), `ClaimFlag` (LLM DTO — bare array, per the
+  extractJson lesson), `ValidationPrompts`, `SourceTextResolver`.
+- Provenance resolution: `ContentItem.sources()` refs are **document/chunk
+  level**, not block level — the understanding agent stamps
+  `SourceRef(filename, "document" | "chunk i/n", itemCounter)`. So
+  `SourceTextResolver` finds the `DocumentModel` by filename and **re-chunks it
+  with the same deterministic `DocumentChunker`** to return exactly the chunk
+  the item came from, capped at `app.validation.max-source-chars` (default
+  6000 — keeps source + article inside `num-ctx: 8192`).
+- Two independent checks per article: (1) a **deterministic numeric
+  cross-check** (regex `\d[\d,]*(\.\d+)?`, comma-stripped token + substring
+  match against source + item title/summary/metrics + issue title; misses →
+  MEDIUM, no LLM cost); (2) **one LLM call per article** returning a bare
+  `ClaimFlag[]` (empty array = all supported), severities parsed leniently.
+- Deterministic Java gate: `exportBlocked` = any flag `meetsOrExceeds`
+  `app.validation.blocking-severity` (default `high`).
+- Failure isolation: LLM-call failure or unresolvable source → one LOW flag on
+  that article, run continues. Leadership Message skipped (source == null).
+- `PipelineContext` carries `ValidationReport`; `IngestionResponse` gained a
+  `validation` field (ValidationSummary → FlagSummary). `result.html` renders
+  the gate banner (`.gate.ok`/`.gate.blocked`) + flags table with severity
+  chips (`.sev.high/.medium/.low` in `app.css`).
+- Observed live: the small model's flags lean verbose/over-cautious (it flags
+  interpretive framing as MEDIUM); severities other than HIGH don't block, so
+  this is noise, not a gate problem. Tune `ValidationPrompts.SYSTEM` if it gets
+  worse.
+
 **Thymeleaf is now properly integrated (no longer "temporary"):**
 - Shared fragments in `templates/fragments/page.html` (`head(title)` fragment +
   `back` link); all styling moved to `static/css/app.css`; `templates/error.html`
@@ -124,18 +196,26 @@ the item scored 9/10 plus rationale. Also verified through the web UI
 - **Each agent = its own package** under `agent/`. Ingestion is `agent/ingestion/`.
 - **AI not wired yet** — Spring AI + Ollama starter still needs adding (Phase 0).
 
-**Not done:** Agents #1–#3 automated unit tests; DB persistence of results
-(in-memory only, returned in HTTP response); Agents #4–#10.
+**Not done:** Agents #1–#5 automated unit tests; DB persistence of results
+(in-memory only, returned in HTTP response); flag *resolution* (the gate reports
+`exportBlocked` but there is no endpoint to resolve/waive flags yet — belongs
+with Phase 4 API work); Agents #6–#10.
 
-**Next up → Agent #4 (Content Generation):** reads
-`context.getNewsletterPlan()`, generates article bodies/titles/summaries per
-section (including writing the Leadership Message placeholder section, which has
-no source items), keeps a consistent corporate tone via a shared system prompt.
-New `agent/generation/` package. Any future agent doing structured LLM output
-should target a shape that matches what the model naturally emits (arrays for
-lists, not a wrapper object) — see the `extractJson` note above before assuming
-`.entity()` alone is reliable with this model. Also note this small model may
-leave optional string fields (e.g. `rationale`) empty — always null-guard.
+**Performance note (observed live):** with `num-ctx: 8192` and chunking, a large
+docx (93 blocks → 2 chunks) took ~9.5 min *per understanding chunk* on this
+CPU-only machine — decode of a 20-item JSON array dominates. The small sample
+docx runs the whole 4-agent pipeline in ~90s. Generation calls are short
+(~150-word outputs, ~25s each). Budget accordingly when testing with the big
+`samples/TD_Monthly_SourcePack_June2026.docx`.
+
+**Next up → Agent #6 (Brand Compliance):** apply writing guidelines + approved
+terminology from a rules config file (start simple: a YAML/properties list of
+banned terms → preferred replacements, casing rules for product/brand names),
+check the generated articles, report violations and auto-fix where safe
+(deterministic string checks first; LLM only if a rewrite is needed). New
+`agent/compliance/` package. LLM-output lessons so far: lists → bare arrays
+(`Foo[]`), long prose → plain text protocol (see Agent #4 facts), optional
+string fields may come back empty — always null-guard.
 
 ---
 
@@ -262,15 +342,38 @@ config-driven under `app.planning.*`.
       correct plan via API and web UI.
 - [ ] Automated unit tests (currently verified manually only).
 
-### 3.4 Content Generation Agent
-- [ ] Generate article body, titles, summaries, captions, callouts per section.
-- [ ] Rewrite technical content into reader-friendly corporate tone.
-- [ ] Keep tone/style consistent across sections (shared system prompt).
+### 3.4 Content Generation Agent  — DONE (live e2e verified)
+**Package `agent/generation/`:** `ContentGenerationAgent` (`@Order(4)`) — one
+plain-text LLM call per planned item ("line 1 = headline, rest = body"; JSON
+deliberately avoided for long prose) plus one Leadership Message call from an
+issue digest; shared system prompt for tone; per-article fallback to the
+extracted title/summary on failure. Output is a `GeneratedNewsletter` on the
+context.
 
-### 3.5 Fact Validation Agent
-- [ ] Verify numbers, dates, names against source documents (provenance check).
-- [ ] Flag missing / inconsistent / unsupported claims as `ValidationFlag`s.
-- [ ] Gate: block export while unresolved high-severity flags exist (configurable).
+- [x] Generate article body + headline per planned item, per section.
+- [x] Write the Leadership Message (no source items — issue-digest prompt).
+- [x] Rewrite technical content into reader-friendly corporate tone.
+- [x] Keep tone/style consistent across sections (shared system prompt).
+- [x] Live end-to-end run through the Spring app — sample `.docx` produced the
+      written issue via API (and web UI).
+- [ ] Automated unit tests (currently verified manually only).
+- [ ] (Later) captions/callouts once the Layout agent needs them.
+
+### 3.5 Fact Validation Agent  — DONE (live e2e verified)
+**Package `agent/validation/`:** `FactValidationAgent` (`@Order(5)`) — per
+article: deterministic numeric cross-check + one LLM fact-check call (bare
+`ClaimFlag[]`) against source text resolved via `SourceTextResolver`
+(re-chunks the source doc deterministically, since provenance is chunk-level).
+Deterministic Java gate on `app.validation.blocking-severity` (default high).
+
+- [x] Verify numbers, dates, names against source documents (provenance check).
+- [x] Flag missing / inconsistent / unsupported claims as `ValidationFlag`s.
+- [x] Gate: block export while unresolved high-severity flags exist (configurable).
+- [x] Live end-to-end run through the Spring app — validation block returned
+      via API (caught a real hallucinated claim, HIGH → export blocked) and
+      the web UI renders the gate banner + flags table.
+- [ ] Flag resolution/waiver endpoint (Phase 4, needed before export can unblock).
+- [ ] Automated unit tests (currently verified manually only).
 
 ### 3.6 Brand Compliance Agent
 - [ ] Apply writing guidelines + approved terminology (rules config file to start).

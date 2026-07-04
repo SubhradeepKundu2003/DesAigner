@@ -3,8 +3,10 @@ package com.tcs.contentGenerator.orchestrator;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.planning.NewsletterPlan;
 import com.tcs.contentGenerator.agent.understanding.ContentItem;
+import com.tcs.contentGenerator.agent.validation.ValidationReport;
 import com.tcs.contentGenerator.document.DocumentModel;
 import com.tcs.contentGenerator.storage.StoredFile;
 
@@ -12,8 +14,10 @@ import com.tcs.contentGenerator.storage.StoredFile;
  * Mutable state carried through the agent pipeline. Each agent reads the output
  * of earlier stages and appends its own: the ingestion agent fills in the
  * normalized {@link DocumentModel}s, the understanding agent adds the classified
- * {@link ContentItem}s, the planning agent sets the {@link NewsletterPlan}, and
- * later stages (generation, ...) will add their own fields.
+ * {@link ContentItem}s, the planning agent sets the {@link NewsletterPlan}, the
+ * generation agent sets the {@link GeneratedNewsletter}, the fact validation
+ * agent sets the {@link ValidationReport}, and later stages will add their own
+ * fields.
  */
 public class PipelineContext {
 
@@ -22,6 +26,8 @@ public class PipelineContext {
     private final List<DocumentModel> documents = new ArrayList<>();
     private final List<ContentItem> contentItems = new ArrayList<>();
     private NewsletterPlan newsletterPlan;
+    private GeneratedNewsletter generatedNewsletter;
+    private ValidationReport validationReport;
 
     public PipelineContext(String jobId, List<StoredFile> inputFiles) {
         this.jobId = jobId;
@@ -59,6 +65,24 @@ public class PipelineContext {
 
     public void setNewsletterPlan(NewsletterPlan newsletterPlan) {
         this.newsletterPlan = newsletterPlan;
+    }
+
+    /** {@code null} until the generation agent has run. */
+    public GeneratedNewsletter getGeneratedNewsletter() {
+        return generatedNewsletter;
+    }
+
+    public void setGeneratedNewsletter(GeneratedNewsletter generatedNewsletter) {
+        this.generatedNewsletter = generatedNewsletter;
+    }
+
+    /** {@code null} until the fact validation agent has run. */
+    public ValidationReport getValidationReport() {
+        return validationReport;
+    }
+
+    public void setValidationReport(ValidationReport validationReport) {
+        this.validationReport = validationReport;
     }
 
     /** Storage prefix under which extracted images for this job are kept. */
