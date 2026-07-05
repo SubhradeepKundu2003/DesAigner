@@ -102,6 +102,13 @@ app:
     # storage/<brand-assets-root>/<NEWSLETTER_SECTION_NAME>/, with a GENERIC/
     # folder as the catch-all fallback. No config/code change needed to add one.
     brand-assets-root: assets
+  review:
+    # WCAG-style text/background contrast ratio a text box must meet or exceed.
+    contrast-ratio-threshold: 4.5
+    # Slack allowed before a frame outside the page margins is flagged.
+    margin-tolerance-pt: 1.0
+    # Slack allowed before estimated text height exceeding its frame is flagged.
+    overflow-tolerance-pt: 4.0
 server:
   port: 8090
   error:

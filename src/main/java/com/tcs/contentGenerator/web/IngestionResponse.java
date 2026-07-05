@@ -12,6 +12,8 @@ import com.tcs.contentGenerator.agent.graphics.ImagePlacement;
 import com.tcs.contentGenerator.agent.planning.NewsletterPlan;
 import com.tcs.contentGenerator.agent.planning.PlannedItem;
 import com.tcs.contentGenerator.agent.planning.SectionPlan;
+import com.tcs.contentGenerator.agent.review.ReviewFinding;
+import com.tcs.contentGenerator.agent.review.ReviewReport;
 import com.tcs.contentGenerator.agent.understanding.ContentItem;
 import com.tcs.contentGenerator.agent.validation.ValidationFlag;
 import com.tcs.contentGenerator.agent.validation.ValidationReport;
@@ -33,7 +35,8 @@ public record IngestionResponse(
         ValidationSummary validation,
         ComplianceSummary compliance,
         DesignSummary design,
-        GraphicsSummary graphics) {
+        GraphicsSummary graphics,
+        ReviewSummary review) {
 
     public record DocumentSummary(
             String filename,
@@ -126,6 +129,20 @@ public record IngestionResponse(
     public record PlacementSummary(String section, String article, String source) {
     }
 
+    /** The quality pass: a 0-100 score plus every layout/editorial finding raised. */
+    public record ReviewSummary(
+            int qualityScore,
+            int componentsChecked,
+            int articlesChecked,
+            long layoutFindings,
+            long editorialFindings,
+            List<FindingSummary> findings) {
+    }
+
+    public record FindingSummary(String source, String category, String severity, String componentId,
+            String message) {
+    }
+
     public static IngestionResponse from(PipelineContext context) {
         List<DocumentSummary> summaries = context.getDocuments().stream()
                 .map(IngestionResponse::summarize)
@@ -139,7 +156,28 @@ public record IngestionResponse(
                 summarize(context.getValidationReport()),
                 summarize(context.getComplianceReport()),
                 summarize(context.getDesignDocument()),
-                summarize(context.getGraphicsReport()));
+                summarize(context.getGraphicsReport()),
+                summarize(context.getReviewReport()));
+    }
+
+    private static ReviewSummary summarize(ReviewReport report) {
+        if (report == null) {
+            return null;
+        }
+        List<FindingSummary> findings = report.findings().stream()
+                .map(IngestionResponse::summarize)
+                .toList();
+        return new ReviewSummary(report.qualityScore(), report.componentsChecked(), report.articlesChecked(),
+                report.layoutFindingCount(), report.editorialFindingCount(), findings);
+    }
+
+    private static FindingSummary summarize(ReviewFinding finding) {
+        return new FindingSummary(
+                finding.source().name(),
+                finding.category(),
+                finding.severity().label(),
+                finding.componentId(),
+                finding.message());
     }
 
     private static DesignSummary summarize(DesignDocument document) {

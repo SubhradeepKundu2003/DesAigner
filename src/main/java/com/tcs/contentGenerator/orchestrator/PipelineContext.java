@@ -7,6 +7,7 @@ import com.tcs.contentGenerator.agent.compliance.ComplianceReport;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.graphics.GraphicsReport;
 import com.tcs.contentGenerator.agent.planning.NewsletterPlan;
+import com.tcs.contentGenerator.agent.review.ReviewReport;
 import com.tcs.contentGenerator.agent.understanding.ContentItem;
 import com.tcs.contentGenerator.agent.validation.ValidationReport;
 import com.tcs.contentGenerator.design.DesignDocument;
@@ -23,8 +24,8 @@ import com.tcs.contentGenerator.storage.StoredFile;
  * {@link ComplianceReport} (and replaces the {@link GeneratedNewsletter} with
  * the corrected text), the design composition agent sets the {@link DesignDocument},
  * the image graphics agent sets the {@link GraphicsReport} (and replaces the
- * {@link DesignDocument} with the image-enriched one), and later stages will
- * add their own fields.
+ * {@link DesignDocument} with the image-enriched one), and the review agent
+ * sets the {@link ReviewReport} — the last stage before export.
  */
 public class PipelineContext {
 
@@ -38,6 +39,7 @@ public class PipelineContext {
     private ComplianceReport complianceReport;
     private DesignDocument designDocument;
     private GraphicsReport graphicsReport;
+    private ReviewReport reviewReport;
 
     public PipelineContext(String jobId, List<StoredFile> inputFiles) {
         this.jobId = jobId;
@@ -120,6 +122,15 @@ public class PipelineContext {
 
     public void setGraphicsReport(GraphicsReport graphicsReport) {
         this.graphicsReport = graphicsReport;
+    }
+
+    /** {@code null} until the review agent has run. */
+    public ReviewReport getReviewReport() {
+        return reviewReport;
+    }
+
+    public void setReviewReport(ReviewReport reviewReport) {
+        this.reviewReport = reviewReport;
     }
 
     /** Storage prefix under which extracted images for this job are kept. */

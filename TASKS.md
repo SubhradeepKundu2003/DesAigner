@@ -251,10 +251,10 @@ violations table and "✓ fixed" chips.
 - **Each agent = its own package** under `agent/`. Ingestion is `agent/ingestion/`.
 - **AI not wired yet** — Spring AI + Ollama starter still needs adding (Phase 0).
 
-**Not done:** Agents #1–#5 automated unit tests (#6/#7/renderers/stores have
-them); Agents #8–#9. (DB persistence of the design + flags and the
-flag-resolution endpoint landed with Phase C — see below; intermediate agent
-outputs other than flags are still in-memory/response-only by design.)
+**Not done:** Agents #1–#5 automated unit tests (#6/#7/#8/#9/renderers/stores
+have them). (DB persistence of the design + flags and the flag-resolution
+endpoint landed with Phase C — see below; intermediate agent outputs other
+than flags are still in-memory/response-only by design.)
 
 **Performance note (observed live):** with `num-ctx: 8192` and chunking, a large
 docx (93 blocks → 2 chunks) took ~9.5 min *per understanding chunk* on this
@@ -569,12 +569,83 @@ embedded base64 data URI.
   only needed `StorageService.retrieve` internally (for `ImageIO` dimension
   decoding and, via the renderers, actual bytes), not a public HTTP endpoint.
 
-**Next up → Agent #9 (review).** Also still open: Agents #1–#5 unit tests
-(only #6, #7, #8, the renderers, and the stores have them); the design API's
+**Phase D — Agent #9 (Review) DONE (2026-07-05): built, unit-tested (9 tests,
+all green), and verified live e2e** (booted on 8093, Postgres + Ollama, ~90s
+full pipeline on the small sample): `POST /api/ingest` returned a `review`
+block — `{qualityScore: 100, componentsChecked: 13, articlesChecked: 2,
+layoutFindings: 0, editorialFindings: 0, findings: []}` on a clean run; the
+same run through the dev UI (`POST /run`) rendered the Agent #9 stage with a
+"score 100/100" badge and the "issue is clean" message. To exercise the
+findings path (mirroring Agent #6's injected-rule trick), re-booted with
+`app.review.contrast-ratio-threshold` forced to 21 via `SPRING_APPLICATION_JSON`
+— every text box now fails contrast by construction, and the rerun correctly
+produced 9 `LOW_CONTRAST` findings, a quality score of 55, and a populated
+findings table (severity/source/category/component/message columns, reusing
+the `.sev`/`.cat` CSS classes from Agents #5/#2).
+
+**Agent #9 facts:**
+- Package `agent/review/`: `ReviewAgent` (`@Order(9)`) — the last agent before
+  export. Two independent halves, matching the report's own two `FindingSource`
+  values: `LayoutLint` (deterministic, no LLM) and one LLM call per
+  `ARTICLE_BODY` `TextBox` returning a bare `EditorialCheck[]` (per the
+  extractJson lesson — lists are bare arrays, never a wrapper object).
+  `ReviewFinding` (source, category, severity, **componentId**, message) —
+  pointing at the component by id, not free text, is what lets a future editor
+  highlight the exact box a finding is about. `ReviewReport` (qualityScore,
+  findings, componentsChecked, articlesChecked) is set on the context; nothing
+  is rewritten (unlike Compliance/Graphics) — review only reports, a human or
+  an earlier-agent rerun fixes what it finds.
+- `LayoutLint` reuses the same `TextMeasurer` the layout engine itself measures
+  with (a finding here means the estimate now disagrees with a frame — e.g. a
+  future hand-edit shrank it) plus four more checks, all pairwise/O(components)
+  per page: **text overflow** (estimated height vs. frame height, tolerance
+  `app.review.overflow-tolerance-pt`), **frame overlap** (pairwise rectangle
+  intersection, skipping any pair involving a `ShapeBox` — dividers and
+  section-icon dots are deliberately placed behind/beside other components, so
+  flagging those would be noise), **margin violations** (frame vs. theme
+  margins, tolerance `app.review.margin-tolerance-pt`), **low text/background
+  contrast** (WCAG relative-luminance ratio between a `TextBox`'s resolved
+  color and whichever `ShapeBox` fill — or the page background — its frame
+  overlaps, threshold `app.review.contrast-ratio-threshold`, default 4.5), and
+  **orphaned section title** (a `SECTION_TITLE` that is the last component on
+  a page and sits in the bottom quarter of the content area — its section's
+  body got pushed to the next page).
+- Thresholds are plain `@Value`-injected constructor scalars (matching the
+  majority pattern — planning/validation/graphics do this too; compliance's
+  `@ConfigurationProperties` record is for a structurally nested rulebook,
+  which review doesn't have), defaulted in `application.yaml` under
+  `app.review.*`.
+- The 0-100 **quality score is deterministic Java, never asked of the LLM**
+  (same split as every other agent's gate/score): starts at 100, −10 per HIGH
+  finding, −5 per MEDIUM, −2 per LOW, clamped to [0, 100].
+- Editorial failure isolation matches Fact Validation's pattern exactly: a
+  failed LLM call degrades to one LOW `REVIEW_FAILED` finding on that one
+  component, never the run. `FindingSeverity` is a copy of
+  `ValidationSeverity`'s lenient `fromLabel` (kept local to `agent/review/`
+  rather than reused cross-package, since the two have no gating relationship).
+- `PipelineContext` carries `ReviewReport` (get/setReviewReport; `null` until
+  this agent runs, and stays `null` — not set to an empty report — if there is
+  no `DesignDocument` yet, mirroring Graphics' guard rather than Validation's).
+  `IngestionResponse` gained a `review` field (`ReviewSummary` →
+  `FindingSummary`); `result.html` renders the stage (quality-score badge +
+  findings table, reusing `.sev`/`.cat`/`.check-stats` — no new CSS needed).
+  `index.html`'s agent list was also missing Agent #8 from an earlier session;
+  both #8 and #9 were added while touching this file.
+- Unit tests (`ReviewAgentTest`, 9 tests): each `LayoutLint` check gets its own
+  fixture-driven test (clean/overflow/overlap/decorative-shape-exemption/
+  margin/orphan), plus the editorial-findings-from-LLM, call-failure-fallback,
+  score-is-100-when-clean, and no-design-document-skips-the-agent paths — LLM
+  stubbed, no Ollama needed.
+
+**Also still open** (unchanged by this phase): Agents #1–#5 unit tests (only
+#6, #7, #8, #9, the renderers, and the stores have them); the design API's
 asset serve/upload endpoints (still nothing needs them yet — the editor does,
 once it exists). LLM-output lessons carry forward unchanged (lists → bare
-arrays, long prose → plain-text protocol, null-guard optional fields) —
-Phases C and D make no LLM calls.
+arrays, long prose → plain-text protocol, null-guard optional fields).
+
+**Next:** the full agent pipeline (#1–#9) is now built. What's left is Phase 4
+(Angular visual editor) and Phase 5 (hardening) — see below — plus the
+still-open unit-test/asset-endpoint gaps just noted.
 
 ---
 
@@ -851,20 +922,25 @@ sources — pictures extracted from source documents at ingestion
       test image is tiny).
 - [ ] (Dropped from scope: AI image generation.)
 
-### 3.9 Review Agent
+### 3.9 Review Agent — DONE (live e2e verified + unit tests)
 **Package `agent/review/`** (`ReviewAgent` `@Order(9)`, `ReviewReport`,
 `LayoutLint`, `EditorialCheck`). Quality pass over the finished
 `DesignDocument`; findings point at component ids so the editor can show a
-review panel. Auto-fix only trivial mechanical issues; everything else is a
-finding.
+review panel. Nothing is auto-fixed — this agent only reports; a human (via
+the future editor) or a rerun of an earlier agent fixes what it finds.
 
-- [ ] Deterministic layout lint: text overflow, overlapping frames, margin
+- [x] Deterministic layout lint: text overflow, overlapping frames, margin
       violations, low-contrast text-on-fill, orphaned section title at page
       bottom.
-- [ ] LLM editorial review over text boxes: grammar/spelling/readability —
+- [x] LLM editorial review over text boxes: grammar/spelling/readability —
       bare-array findings DTO (per the extractJson lesson).
-- [ ] Quality score + itemized `ReviewReport` on the context, rendered in the
+- [x] Quality score + itemized `ReviewReport` on the context, rendered in the
       dev UI.
+- [x] Unit tests (`ReviewAgentTest`, 9 tests, LLM stubbed).
+- [x] Live end-to-end run through the Spring app — clean run (`qualityScore:
+      100`) via API and web UI, plus an injected-threshold run (forced
+      `LOW_CONTRAST` findings, `qualityScore: 55`) confirming the findings
+      table renders.
 
 ### 3.10 Export, Persistence & Editor API (renderers, not an agent)
 **Packages `render/` + `web/`.** Mostly *not an agent* — infrastructure that

@@ -273,6 +273,41 @@
         <p class="empty" th:if="${graphics == null}">The image graphics agent did not run.</p>
     </div>
 
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #9 output -->
+    <div class="stage" th:with="review=${result.review()}">
+        <h2>Agent #9 — Review
+            <span class="badge" th:if="${review != null}" th:text="|score ${review.qualityScore()}/100|">0</span>
+        </h2>
+
+        <th:block th:if="${review != null}">
+            <p class="check-stats"
+               th:text="|${review.componentsChecked()} component(s) layout-checked, ${review.articlesChecked()} article(s) reviewed editorially: ${review.layoutFindings()} layout finding(s), ${review.editorialFindings()} editorial finding(s).|">stats</p>
+
+            <table th:if="${!review.findings().isEmpty()}">
+                <thead>
+                    <tr><th>Severity</th><th>Source</th><th>Category</th><th>Component</th><th>Finding</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="f : ${review.findings()}">
+                        <td><span th:class="|sev ${#strings.toLowerCase(f.severity())}|"
+                                  th:text="${f.severity()}">Medium</span></td>
+                        <td th:text="${f.source()}">LAYOUT</td>
+                        <td><span class="cat" th:text="${f.category()}">TEXT_OVERFLOW</span></td>
+                        <td class="claim" th:text="${f.componentId()}">cmp-1</td>
+                        <td class="rationale" th:text="${f.message()}">finding</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="empty" th:if="${review.findings().isEmpty()}">
+                No layout or editorial issues found — the issue is clean.
+            </p>
+        </th:block>
+
+        <p class="empty" th:if="${review == null}">The review agent did not run.</p>
+    </div>
+
     <a th:replace="~{fragments/page :: back}"></a>
 </body>
 </html>
