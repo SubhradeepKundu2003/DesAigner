@@ -251,10 +251,10 @@ violations table and "✓ fixed" chips.
 - **Each agent = its own package** under `agent/`. Ingestion is `agent/ingestion/`.
 - **AI not wired yet** — Spring AI + Ollama starter still needs adding (Phase 0).
 
-**Not done:** Agents #1–#5 automated unit tests (#6 has them); DB persistence
-of results (in-memory only, returned in HTTP response); flag *resolution* (the
-gate reports `exportBlocked` but there is no endpoint to resolve/waive flags
-yet — belongs with Phase 4 API work); Agents #7–#10.
+**Not done:** Agents #1–#5 automated unit tests (#6/#7/renderers/stores have
+them); Agents #8–#9. (DB persistence of the design + flags and the
+flag-resolution endpoint landed with Phase C — see below; intermediate agent
+outputs other than flags are still in-memory/response-only by design.)
 
 **Performance note (observed live):** with `num-ctx: 8192` and chunking, a large
 docx (93 blocks → 2 chunks) took ~9.5 min *per understanding chunk* on this
@@ -415,15 +415,80 @@ a 595×842pt page.
   media box 595×842pt, exact page counts (1-page and 2-page fixtures), and
   per-page extracted text (`PDFTextStripper` with start/end page).
 
-**Next up → Phase C: persistence + editor API** (§3.10 — persist
-`DesignDocument` as Postgres jsonb with revision, editor REST CRUD + export
-endpoint, move the fact-validation export gate there; the natural moment to
-finally do DB persistence). Also still open: Agents #1–#5 unit tests (only
-#6, #7, and the PPTX/PDF renderers have them), the flag-resolution endpoint,
-and Agent #8 (graphics — real images instead of the icon-dot/placeholder
-stand-ins) + Agent #9 (review). LLM-output lessons carry forward unchanged
-(lists → bare arrays, long prose → plain-text protocol, null-guard optional
-fields) — neither renderer makes LLM calls.
+**Phase C DONE (2026-07-05): persistence + editor API** — built, unit-tested
+(suite 26/26 green), and **verified live e2e** (booted on 8091, Postgres +
+Ollama, ~65s pipeline on the small sample): the run persisted the design
+(jsonb, revision 1) and its flags; then over the real API: `GET
+/api/designs/{jobId}` loaded it; `PUT` with a stale revision → 409 with a
+reload message; `PUT` at the right revision → 200, revision 2, and the edited
+issue title survived reload; `export?format=pptx|pdf` → real files **containing
+the human-edited text** (export renders the *saved* model — Phase C's whole
+point); unknown format → 400, unknown job/flag → 404. Gate: inserted a HIGH
+unresolved flag → export 409 + `flags` endpoint shows `exportBlocked: true`;
+`POST .../flags/1/resolve` with a note → export 200 again.
+
+**Phase C facts:**
+- Package `persistence/`: `DesignRecord` (table `design_documents`: `job_id`
+  PK, `revision`, `document` **jsonb**, timestamps), `ValidationFlagRecord`
+  (table `validation_flags`: one row per fact-check finding + `resolved`/
+  `resolution_note`/`resolved_at`), their Spring Data repos, `DesignStore`,
+  `FlagStore`, and 404/409 exceptions (`@ResponseStatus`-annotated, so
+  controllers just throw).
+- **jsonb without Hibernate's JSON machinery** (deliberate — Jackson 3 vs
+  Hibernate format-mapper uncertainty): the entity field is a plain JSON
+  `String` with `@Column(columnDefinition = "jsonb")` +
+  `@ColumnTransformer(write = "?::jsonb")` for inserts; `DesignStore`
+  serializes with the **injected Spring `tools.jackson.databind.ObjectMapper`**
+  (the same one MVC uses), so stored JSON ≡ wire JSON. Reads come back as
+  String and deserialize in the store.
+- **Optimistic locking is one atomic native UPDATE**, not read-modify-write:
+  `updateIfRevisionMatches` does `set document = cast(? as jsonb), revision =
+  expected + 1 where job_id = ? and revision = expected`; 0 rows → existsById
+  distinguishes `DesignNotFoundException` (404) from `StaleRevisionException`
+  (409). `saveEdit` returns the bumped document so the editor keeps saving
+  without reloads. The pipeline's first write (`saveNew`) is a plain insert at
+  the document's own revision (1).
+- **Export gate moved to the API and is now live-state**: `FlagStore
+  .exportBlocked(jobId)` counts unresolved flags with severity in the blocking
+  set (computed once from `app.validation.blocking-severity` via the existing
+  `meetsOrExceeds` — same config the validation agent uses). Resolving the
+  last blocking flag is what unblocks export; the `ValidationReport`'s
+  `exportBlocked` remains a point-in-time snapshot for the run response.
+- `web/DesignApiController` (`/api/designs`): `GET /{jobId}`, `PUT /{jobId}`
+  (body = full `DesignDocument`, its `revision` = the one loaded),
+  `GET|POST /{jobId}/export?format=` (GET too so a plain download link works),
+  `GET /{jobId}/flags` → `{exportBlocked, flags[]}`,
+  `POST /{jobId}/flags/{flagId}/resolve` (optional `{"note": …}`; a flag id
+  under the wrong job is 404, not someone else's waiver). Asset serve/upload
+  endpoints deferred until Agent #8 actually produces assets.
+- `ExportFormat` now carries `mediaType()`/`fileExtension()`/lenient
+  `fromName()` — media-type switches deleted from controllers.
+- `PipelineService` persists after `orchestrator.run()` returns (flags, then
+  design) in short per-store transactions — deliberately *no* pipeline-long
+  transaction. `PipelineViewController` lost the throwaway in-memory map and
+  its `/design/{jobId}/export.*` endpoint; `result.html` download links go
+  through the real API (so dev-UI downloads now honor the gate).
+- Tests: `DesignStoreTest` (4 — revision bump lands in returned *and* stored
+  JSON, stale → 409-exception, missing → 404-exception, saveNew/load
+  round-trip) and `FlagStoreTest` (4 — blocking-set semantics for high/medium
+  thresholds, cross-job resolve is NotFound, resolve stamps note). Mockito is
+  on the test classpath via the Boot 4 test starters.
+- **⚠ DB_URL gotcha (this machine):** the user environment exports
+  `DB_URL=jdbc:postgresql://localhost:5432/login` — another project's
+  database. A bare `./mvnw spring-boot:run` inherits it and Hibernate will
+  happily create our tables there (happened once this session; the two empty
+  tables were dropped from `login` again). **Always boot with an explicit
+  `DB_URL=jdbc:postgresql://localhost:5432/contentgenerator`** (or unset the
+  user-level env var). The `contentgenerator` DB now holds
+  `design_documents` + `validation_flags`.
+
+**Next up → Phase D: Agent #8 (graphics)** — real images from ingested
+`ImageBlock.storedRef`s + a brand-asset dir, replacing the icon-dot/placeholder
+stand-ins; also the moment for the design API's asset endpoints — **and Agent
+#9 (review)**. Also still open: Agents #1–#5 unit tests (only #6, #7, the
+renderers, and the stores have them). LLM-output lessons carry forward
+unchanged (lists → bare arrays, long prose → plain-text protocol, null-guard
+optional fields) — Phase C makes no LLM calls.
 
 ---
 
@@ -445,7 +510,8 @@ fields) — neither renderer makes LLM calls.
       render; Thymeleaf (already added) serves the dev web UI only.
 - [ ] Externalize secrets/config: DB creds (and Ollama URL) via env vars in
       `application.yaml` — no API key needed for local Ollama.
-- [ ] Configure PostgreSQL datasource + JPA (ddl-auto, dialect) in `application.yaml`.
+- [x] Configure PostgreSQL datasource + JPA (ddl-auto, dialect) in `application.yaml`
+      — exercised for real since Phase C (`design_documents` + `validation_flags`).
 - [ ] Set up local Postgres (Docker Compose file) for dev.
 - [ ] Baseline Spring Security config (permit dev endpoints, lock the rest) so the
       app boots without blocking API work.
@@ -583,7 +649,8 @@ Deterministic Java gate on `app.validation.blocking-severity` (default high).
 - [x] Live end-to-end run through the Spring app — validation block returned
       via API (caught a real hallucinated claim, HIGH → export blocked) and
       the web UI renders the gate banner + flags table.
-- [ ] Flag resolution/waiver endpoint (Phase 4, needed before export can unblock).
+- [x] Flag resolution/waiver endpoint — `POST /api/designs/{jobId}/flags/{flagId}/resolve`
+      (Phase C); the export gate reads live resolved state from `validation_flags`.
 - [ ] Automated unit tests (currently verified manually only).
 
 ### 3.6 Brand Compliance Agent  — DONE (live e2e verified + unit tests)
@@ -729,14 +796,15 @@ deliverable.
       bytes back with PDFBox) and verified live via the "Download PDF" link
       (`GET /design/{jobId}/export.pdf` — export endpoint generalized to
       `export.{extension}`).
-- [ ] Persist `DesignDocument` as Postgres `jsonb` (+ jobId, revision,
-      timestamps) — the natural moment to finally do DB persistence.
-- [ ] Editor REST API: `GET /api/designs/{id}` (load), `PUT /api/designs/{id}`
-      (save; revision check → 409 on conflict), `POST
-      /api/designs/{id}/export?format=pptx|pdf|html` (download), asset
-      serve/upload endpoints.
-- [ ] Move the fact-validation **export gate** here: export blocked while
-      unresolved HIGH flags exist (needs the flag-resolution endpoint, Phase 4).
+- [x] Persist `DesignDocument` as Postgres `jsonb` (+ jobId, revision,
+      timestamps) — `persistence/DesignRecord` + `DesignStore` (Phase C).
+- [x] Editor REST API: `GET /api/designs/{id}` (load), `PUT /api/designs/{id}`
+      (save; revision check → 409 on conflict, atomic guarded UPDATE), `GET|POST
+      /api/designs/{id}/export?format=pptx|pdf|html` (download). Asset
+      serve/upload endpoints deferred to Agent #8 (nothing produces assets yet).
+- [x] Move the fact-validation **export gate** here: export answers 409 while
+      unresolved flags at blocking severity exist; unblocked live by the
+      flag-resolution endpoint (Phase C).
 - [ ] (Deferred: Word `.docx` export; email packaging/distribution.)
 
 ## Phase 4 — API & Angular Editor
