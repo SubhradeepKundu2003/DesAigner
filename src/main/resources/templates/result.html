@@ -241,6 +241,38 @@
         <p class="empty" th:if="${design == null}">The design composition agent did not run.</p>
     </div>
 
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #8 output -->
+    <div class="stage" th:with="graphics=${result.graphics()}">
+        <h2>Agent #8 — Image &amp; Graphics
+            <span class="badge" th:if="${graphics != null}" th:text="|${graphics.imagesPlaced()} image(s)|">0</span>
+        </h2>
+
+        <th:block th:if="${graphics != null}">
+            <p class="check-stats"
+               th:text="|${graphics.articlesConsidered()} article(s) considered, ${graphics.imagesPlaced()} got an image (source document first, brand asset as fallback).|">stats</p>
+
+            <table th:if="${!graphics.placements().isEmpty()}">
+                <thead>
+                    <tr><th>Section</th><th>Article</th><th>Source</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="p : ${graphics.placements()}">
+                        <td th:text="${p.section()}">section</td>
+                        <td th:text="${p.article()}">article</td>
+                        <td><span class="cat" th:text="${p.source()}">SOURCE_DOCUMENT</span></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="empty" th:if="${graphics.placements().isEmpty()}">
+                No matching source images or brand assets were found; all articles stayed text-only.
+            </p>
+        </th:block>
+
+        <p class="empty" th:if="${graphics == null}">The image graphics agent did not run.</p>
+    </div>
+
     <a th:replace="~{fragments/page :: back}"></a>
 </body>
 </html>

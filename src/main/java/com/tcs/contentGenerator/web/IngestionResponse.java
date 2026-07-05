@@ -7,6 +7,8 @@ import com.tcs.contentGenerator.agent.compliance.ComplianceViolation;
 import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.generation.GeneratedSection;
+import com.tcs.contentGenerator.agent.graphics.GraphicsReport;
+import com.tcs.contentGenerator.agent.graphics.ImagePlacement;
 import com.tcs.contentGenerator.agent.planning.NewsletterPlan;
 import com.tcs.contentGenerator.agent.planning.PlannedItem;
 import com.tcs.contentGenerator.agent.planning.SectionPlan;
@@ -30,7 +32,8 @@ public record IngestionResponse(
         NewsletterSummary newsletter,
         ValidationSummary validation,
         ComplianceSummary compliance,
-        DesignSummary design) {
+        DesignSummary design,
+        GraphicsSummary graphics) {
 
     public record DocumentSummary(
             String filename,
@@ -116,6 +119,13 @@ public record IngestionResponse(
     public record DesignSummary(int pageCount, int componentCount) {
     }
 
+    /** Which articles got a real image, and where each one came from. */
+    public record GraphicsSummary(int articlesConsidered, int imagesPlaced, List<PlacementSummary> placements) {
+    }
+
+    public record PlacementSummary(String section, String article, String source) {
+    }
+
     public static IngestionResponse from(PipelineContext context) {
         List<DocumentSummary> summaries = context.getDocuments().stream()
                 .map(IngestionResponse::summarize)
@@ -128,7 +138,8 @@ public record IngestionResponse(
                 summarize(context.getGeneratedNewsletter()),
                 summarize(context.getValidationReport()),
                 summarize(context.getComplianceReport()),
-                summarize(context.getDesignDocument()));
+                summarize(context.getDesignDocument()),
+                summarize(context.getGraphicsReport()));
     }
 
     private static DesignSummary summarize(DesignDocument document) {
@@ -137,6 +148,21 @@ public record IngestionResponse(
         }
         int components = document.pages().stream().mapToInt(page -> page.components().size()).sum();
         return new DesignSummary(document.pages().size(), components);
+    }
+
+    private static GraphicsSummary summarize(GraphicsReport report) {
+        if (report == null) {
+            return null;
+        }
+        List<PlacementSummary> placements = report.placements().stream()
+                .map(IngestionResponse::summarize)
+                .toList();
+        return new GraphicsSummary(report.articlesConsidered(), report.imagesPlaced(), placements);
+    }
+
+    private static PlacementSummary summarize(ImagePlacement placement) {
+        return new PlacementSummary(placement.sectionTitle(), placement.articleHeadline(),
+                placement.source().name());
     }
 
     private static ComplianceSummary summarize(ComplianceReport report) {

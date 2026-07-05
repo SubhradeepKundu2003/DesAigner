@@ -47,9 +47,9 @@ import com.tcs.contentGenerator.storage.StorageService;
  * in points, the same unit our model already uses — no manual pt→EMU math
  * needed, POI does that conversion internally. {@code TextBox} becomes a text
  * shape, {@code ShapeBox} an auto shape (rect/circle), and {@code ImageBox} a
- * picture when its asset resolves, or a dashed placeholder box (matching the
- * HTML renderer) when it doesn't — Agent #8 hasn't been built yet, so every
- * {@code ImageBox} today takes the placeholder path.
+ * picture when its asset resolves (filled in by Agent #8, the image graphics
+ * agent), or a dashed placeholder box (matching the HTML renderer) when it
+ * doesn't.
  */
 @Component
 public class PptxDesignRenderer implements DesignRenderer {

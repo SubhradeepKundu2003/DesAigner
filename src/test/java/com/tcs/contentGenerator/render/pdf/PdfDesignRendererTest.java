@@ -3,6 +3,7 @@ package com.tcs.contentGenerator.render.pdf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,7 @@ import com.tcs.contentGenerator.design.TextStyle;
 import com.tcs.contentGenerator.design.Theme;
 import com.tcs.contentGenerator.render.ExportFormat;
 import com.tcs.contentGenerator.render.html.HtmlDesignRenderer;
+import com.tcs.contentGenerator.storage.StorageService;
 
 /**
  * Verifies the PDF renderer the same way {@code PptxDesignRendererTest} does
@@ -44,7 +46,7 @@ class PdfDesignRendererTest {
                     "Body", new TextStyle("SansSerif", 10, "normal", "text", 14)),
             new Spacing(48, 16));
 
-    private final PdfDesignRenderer renderer = new PdfDesignRenderer(new HtmlDesignRenderer());
+    private final PdfDesignRenderer renderer = new PdfDesignRenderer(new HtmlDesignRenderer(new NoopStorageService()));
 
     @Test
     void reportsPdfFormat() {
@@ -111,6 +113,34 @@ class PdfDesignRendererTest {
             pageTwo.setStartPage(2);
             pageTwo.setEndPage(2);
             assertTrue(pageTwo.getText(pdf).contains("Second page story"));
+        }
+    }
+
+    /** No fixture here uses a real image asset, so every method is unreachable. */
+    private static final class NoopStorageService implements StorageService {
+        @Override
+        public String store(String relativePath, byte[] content) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public byte[] retrieve(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Path resolve(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void delete(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<String> list(String relativeDir) {
+            throw new UnsupportedOperationException();
         }
     }
 }

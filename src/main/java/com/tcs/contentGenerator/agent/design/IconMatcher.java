@@ -4,9 +4,10 @@ import com.tcs.contentGenerator.agent.planning.NewsletterSection;
 
 /**
  * Deterministically maps a newsletter section to a theme color role, used to
- * draw a small colored section-icon dot. A stand-in for real iconography
- * until Agent #8 (graphics) can source actual image assets — swapping in real
- * icons later is a renderer change, not a composition change.
+ * draw a small colored section-icon dot. A stand-in for real iconography —
+ * Agent #8 (graphics) sources real photos for articles, but section icons
+ * still use this dot; swapping in real icons later is a renderer change, not
+ * a composition change.
  */
 public final class IconMatcher {
 

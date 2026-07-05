@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -57,6 +59,22 @@ public class LocalFileStorageService implements StorageService {
             Files.deleteIfExists(resolve(ref));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to delete " + ref, e);
+        }
+    }
+
+    @Override
+    public List<String> list(String relativeDir) {
+        Path dir = resolve(relativeDir);
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (Stream<Path> entries = Files.list(dir)) {
+            return entries.filter(Files::isRegularFile)
+                    .map(p -> root.relativize(p).toString().replace('\\', '/'))
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to list " + relativeDir, e);
         }
     }
 }

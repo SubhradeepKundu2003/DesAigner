@@ -482,13 +482,99 @@ unresolved flag → export 409 + `flags` endpoint shows `exportBlocked: true`;
   user-level env var). The `contentgenerator` DB now holds
   `design_documents` + `validation_flags`.
 
-**Next up → Phase D: Agent #8 (graphics)** — real images from ingested
-`ImageBlock.storedRef`s + a brand-asset dir, replacing the icon-dot/placeholder
-stand-ins; also the moment for the design API's asset endpoints — **and Agent
-#9 (review)**. Also still open: Agents #1–#5 unit tests (only #6, #7, the
-renderers, and the stores have them). LLM-output lessons carry forward
-unchanged (lists → bare arrays, long prose → plain-text protocol, null-guard
-optional fields) — Phase C makes no LLM calls.
+**Phase D — Agent #8 (Image & Graphics) DONE (2026-07-05): built, unit-tested
+(4 tests, all green), and verified live e2e** (booted on 8091, Postgres +
+Ollama): `POST /api/ingest` on the small sample docx (no embedded images)
+returned `graphics: {articlesConsidered: 2, imagesPlaced: 1, placements:
+[{section: "Delivery Highlights", article: "...", source: "BRAND_ASSET"}]}` —
+correctly fell back to the brand asset since the source doc had none;
+`design.componentCount` went from 12 to 13 (exactly one new `ImageBox`).
+Confirmed via the real API: `GET /api/designs/{jobId}` showed the new `Asset`
+(`storedRef: "assets/GENERIC/team-photo.png"`, dimensions correctly decoded:
+320×200) and the `ImageBox` referencing it by `assetId`; the exported PPTX
+(`GET .../export?format=pptx`) contained a real `ppt/media/image1.png` (664
+bytes, matching the source file — not a placeholder); the web UI's `POST /run`
+rendered the Agent #8 stage and the iframe preview showed the image as an
+embedded base64 data URI.
+
+**Agent #8 facts:**
+- **No `ImageBox` ever existed in the pipeline before this agent** — `LayoutEngine`
+  only ever created `TextBox`/`ShapeBox`, and `DesignDocument.assets()` was
+  always `List.of()`. Rather than changing `LayoutEngine`/`SectionComposition`
+  (Agent #7, already done and unit-tested) to reserve slots, Agent #8 both
+  *decides* where an image fits and *fills* it, in one pass over the already-laid-out
+  `DesignDocument` — a deliberate scope choice, confirmed with the user before
+  building.
+- Package `agent/graphics/`: `ImageGraphicsAgent` (`@Order(8)`) delegates to
+  `ImagePlacer` (one instance per run, package-private, not a Spring bean —
+  holds the run's mutable state: used source-image refs, accumulated assets,
+  placements, an id sequence). `AssetLibrary` (`@Component`) is the brand-asset
+  lookup. `GraphicsReport`/`ImagePlacement`/`ImageSource` are the output
+  records, mirroring `ComplianceReport`'s shape.
+- **Geometry heuristic, not a `LayoutEngine` change**: for every `ARTICLE_BODY`
+  `TextBox` with a `SourceLink`, `ImagePlacer` looks at the vertical gap
+  already left between that box's bottom edge and whichever component comes
+  next on the page (or the page's bottom margin if it's last) — if that gap is
+  ≥ 48pt (after an 8pt buffer top and bottom), it fits an image there sized to
+  the source image's real aspect ratio (decoded via `ImageIO`, default 1.5:1
+  if decoding fails), width-capped to the article's own column width. Too
+  little room → the article is silently left text-only. Same "accepted v1
+  trade-off" spirit as `OverflowResolver`'s clamping — no text reflow, no
+  `LayoutEngine` change needed.
+- **Image selection, cheapest/most-specific first**: (1) a picture from the
+  article's own source document — resolved by walking
+  `GeneratedNewsletter` → `GeneratedSection`/`GeneratedArticle` matching the
+  placed component's `SourceLink` (section title + headline, the only
+  provenance a `Component` carries) → `PlannedItem` → `ContentItem.sources()`
+  → match `SourceRef.documentName()` against ingested `DocumentModel`s
+  (**same document-level match `SourceTextResolver` already uses** — `.docx`
+  extraction stamps every block's `location` as the literal string `"Body"`,
+  so there is no finer-than-document-level signal available today; accepted
+  as a known v1 limitation, confirmed with the user) → that document's
+  `ImageBlock`s, first not-yet-used one wins; (2) falls back to
+  `AssetLibrary.findFor(section)` — **brand assets are never marked "used"
+  and can repeat** across articles in the same section/issue, unlike
+  source-document images, which are each used at most once per run so the
+  same photo doesn't appear twice.
+- **Brand-asset convention (new, previously just a TODO)**: one approved image
+  per file under `storage/<app.graphics.brand-assets-root (default "assets")>/<NewsletterSection
+  name>/`, with a `GENERIC/` catch-all folder as the fallback-of-the-fallback —
+  editors add files, no config or code change needed. Required adding
+  `List<String> list(String relativeDir)` to `StorageService`
+  (`LocalFileStorageService` lists regular files under the resolved dir,
+  sorted, empty list if the dir doesn't exist — not an error) — the two
+  existing hand-rolled `StorageService` test fakes
+  (`PptxDesignRendererTest`, `PdfDesignRendererTest`) needed the new method
+  added (throwing, since neither fixture exercises it).
+- **`HtmlDesignRenderer` fixed in the same pass** (previously always drew the
+  dashed placeholder regardless of `assetId`, unlike the PPTX renderer):
+  now resolves `ImageBox.assetId()` through `document.assets()` +
+  `StorageService`, base64-encodes the bytes into a `data:` URI `<img>` tag
+  (a network/endpoint-free choice — no asset-serving endpoint exists yet), and
+  falls back to the placeholder on any retrieval failure. Since
+  `PdfDesignRenderer` feeds this same HTML through openhtmltopdf verbatim,
+  **the PDF export got real images too, at no extra cost** (data URIs need no
+  resource loader) — confirmed as a side effect, not separately tested yet.
+  `HtmlDesignRenderer` gained a `StorageService` constructor dependency;
+  `PdfDesignRendererTest`'s bare `new HtmlDesignRenderer()` needed a
+  throwing-fake `StorageService` added.
+- `PipelineContext` carries `GraphicsReport` (get/setGraphicsReport) and the
+  agent **replaces** the `DesignDocument` on the context with the
+  image-enriched one (same "report is the record of what changed" pattern as
+  Brand Compliance). `IngestionResponse` gained a `graphics` field
+  (`GraphicsSummary` → `PlacementSummary`); `result.html` renders the Agent #8
+  stage (stats line + placements table, "SOURCE_DOCUMENT"/"BRAND_ASSET" tag —
+  no new CSS class needed, reused `.cat`).
+- Asset serve/upload endpoints for the editor are **still open** — this agent
+  only needed `StorageService.retrieve` internally (for `ImageIO` dimension
+  decoding and, via the renderers, actual bytes), not a public HTTP endpoint.
+
+**Next up → Agent #9 (review).** Also still open: Agents #1–#5 unit tests
+(only #6, #7, #8, the renderers, and the stores have them); the design API's
+asset serve/upload endpoints (still nothing needs them yet — the editor does,
+once it exists). LLM-output lessons carry forward unchanged (lists → bare
+arrays, long prose → plain-text protocol, null-guard optional fields) —
+Phases C and D make no LLM calls.
 
 ---
 
@@ -739,19 +825,30 @@ margins/gutters, paginate, resolve overflow) → `DesignDocument` on the context
 - [x] Unit tests: layout invariants (no overlaps, frames inside margins, all
       articles placed) on a fixture newsletter — deterministic, no LLM needed.
 
-### 3.8 Image & Graphics Agent
-**Package `agent/graphics/`** (`ImageGraphicsAgent` `@Order(8)`,
-`AssetLibrary`, `ImageOptimizer`). Enriches the `DesignDocument`: fills image
-slots from two sources we already have — pictures extracted from source
-documents at ingestion (`ImageBlock.storedRef`) and an approved brand-asset
-directory; registers `Asset` entries; scales/optimizes for the page.
+### 3.8 Image & Graphics Agent — DONE (live e2e verified + unit tests)
+**Package `agent/graphics/`** (`ImageGraphicsAgent` `@Order(8)`, `ImagePlacer`,
+`AssetLibrary`, `GraphicsReport`/`ImagePlacement`/`ImageSource`). Enriches the
+`DesignDocument`: since no `ImageBox` slots existed anywhere in the pipeline
+before this agent, it both *decides* where an image fits (geometry heuristic
+over already-laid-out pages, no `LayoutEngine` change) and *fills* it from two
+sources — pictures extracted from source documents at ingestion
+(`ImageBlock.storedRef`, matched at document level via the same provenance
+`SourceTextResolver` uses) and an approved brand-asset directory; registers
+`Asset` entries sized from the real decoded image dimensions.
 
-- [ ] Approved-asset directory convention (`storage/assets/…` behind
-      `StorageService`) + `AssetLibrary` lookup.
-- [ ] Select images for image slots (source-doc images matched via provenance
-      first, brand assets as fallback); leave an explicit placeholder
-      component when nothing suitable exists (the editor is the fallback).
-- [ ] Resize/optimize (bounded dimensions, reasonable file size) at export.
+- [x] Approved-asset directory convention (`storage/assets/<NewsletterSection>/`,
+      `GENERIC/` catch-all, behind `StorageService`) + `AssetLibrary` lookup
+      (required adding `StorageService.list(dir)`).
+- [x] Select images for image slots (source-doc images matched via
+      document-level provenance first, brand assets as fallback, each
+      source-doc image used at most once per run). **Decided with the user:**
+      when neither is available, the article is left text-only — no
+      placeholder `ImageBox` is added (avoids cluttering every article that
+      has no image; a human can still add one in the future editor).
+- [ ] Resize/optimize (bounded dimensions, reasonable file size) at export —
+      not implemented; images embed at their original size. Revisit if
+      real source documents bring in large photos (today's fixtures/live
+      test image is tiny).
 - [ ] (Dropped from scope: AI image generation.)
 
 ### 3.9 Review Agent

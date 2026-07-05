@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.tcs.contentGenerator.agent.compliance.ComplianceReport;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
+import com.tcs.contentGenerator.agent.graphics.GraphicsReport;
 import com.tcs.contentGenerator.agent.planning.NewsletterPlan;
 import com.tcs.contentGenerator.agent.understanding.ContentItem;
 import com.tcs.contentGenerator.agent.validation.ValidationReport;
@@ -20,7 +21,10 @@ import com.tcs.contentGenerator.storage.StoredFile;
  * generation agent sets the {@link GeneratedNewsletter}, the fact validation
  * agent sets the {@link ValidationReport}, the brand compliance agent sets the
  * {@link ComplianceReport} (and replaces the {@link GeneratedNewsletter} with
- * the corrected text), and later stages will add their own fields.
+ * the corrected text), the design composition agent sets the {@link DesignDocument},
+ * the image graphics agent sets the {@link GraphicsReport} (and replaces the
+ * {@link DesignDocument} with the image-enriched one), and later stages will
+ * add their own fields.
  */
 public class PipelineContext {
 
@@ -33,6 +37,7 @@ public class PipelineContext {
     private ValidationReport validationReport;
     private ComplianceReport complianceReport;
     private DesignDocument designDocument;
+    private GraphicsReport graphicsReport;
 
     public PipelineContext(String jobId, List<StoredFile> inputFiles) {
         this.jobId = jobId;
@@ -106,6 +111,15 @@ public class PipelineContext {
 
     public void setDesignDocument(DesignDocument designDocument) {
         this.designDocument = designDocument;
+    }
+
+    /** {@code null} until the image graphics agent has run. */
+    public GraphicsReport getGraphicsReport() {
+        return graphicsReport;
+    }
+
+    public void setGraphicsReport(GraphicsReport graphicsReport) {
+        this.graphicsReport = graphicsReport;
     }
 
     /** Storage prefix under which extracted images for this job are kept. */

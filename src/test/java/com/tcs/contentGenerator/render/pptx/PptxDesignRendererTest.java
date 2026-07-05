@@ -163,6 +163,11 @@ class PptxDesignRendererTest {
         public void delete(String ref) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public List<String> list(String relativeDir) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static final class FailingStorageService implements StorageService {
@@ -183,6 +188,11 @@ class PptxDesignRendererTest {
 
         @Override
         public void delete(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<String> list(String relativeDir) {
             throw new UnsupportedOperationException();
         }
     }

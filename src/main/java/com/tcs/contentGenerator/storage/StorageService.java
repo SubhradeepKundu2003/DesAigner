@@ -1,6 +1,7 @@
 package com.tcs.contentGenerator.storage;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Abstraction over where uploaded files and extracted images live. The local
@@ -23,4 +24,10 @@ public interface StorageService {
 
     /** Delete stored content; no-op if it does not exist. */
     void delete(String ref);
+
+    /**
+     * Refs of the regular files directly under {@code relativeDir}, sorted for
+     * deterministic selection. Empty (not an error) if the directory doesn't exist.
+     */
+    List<String> list(String relativeDir);
 }

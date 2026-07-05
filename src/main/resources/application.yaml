@@ -97,6 +97,11 @@ app:
         - game-changer
         - low-hanging fruit
         - paradigm shift
+  graphics:
+    # Approved brand images, one file per section under
+    # storage/<brand-assets-root>/<NEWSLETTER_SECTION_NAME>/, with a GENERIC/
+    # folder as the catch-all fallback. No config/code change needed to add one.
+    brand-assets-root: assets
 server:
   port: 8090
   error:

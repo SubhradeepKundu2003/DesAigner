@@ -1,9 +1,16 @@
 package com.tcs.contentGenerator.render.html;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.tcs.contentGenerator.design.Asset;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.Frame;
 import com.tcs.contentGenerator.design.ImageBox;
@@ -14,6 +21,7 @@ import com.tcs.contentGenerator.design.TextStyle;
 import com.tcs.contentGenerator.design.Theme;
 import com.tcs.contentGenerator.render.DesignRenderer;
 import com.tcs.contentGenerator.render.ExportFormat;
+import com.tcs.contentGenerator.storage.StorageService;
 
 /**
  * Renders a {@link DesignDocument} as a standalone HTML page: one fixed-size,
@@ -25,7 +33,14 @@ import com.tcs.contentGenerator.render.ExportFormat;
 @Component
 public class HtmlDesignRenderer implements DesignRenderer {
 
+    private static final Logger log = LoggerFactory.getLogger(HtmlDesignRenderer.class);
     private static final TextStyle DEFAULT_STYLE = new TextStyle("SansSerif", 10, "normal", "text", 14);
+
+    private final StorageService storageService;
+
+    public HtmlDesignRenderer(StorageService storageService) {
+        this.storageService = storageService;
+    }
 
     @Override
     public ExportFormat format() {
@@ -45,6 +60,8 @@ public class HtmlDesignRenderer implements DesignRenderer {
      */
     public String renderHtml(DesignDocument document, String extraCss) {
         Theme theme = document.theme();
+        Map<String, Asset> assetsById = document.assets().stream()
+                .collect(Collectors.toMap(Asset::id, Function.identity()));
         StringBuilder html = new StringBuilder();
         html.append("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"/><title>")
                 .append(escape(document.meta().issueTitle()))
@@ -63,7 +80,7 @@ public class HtmlDesignRenderer implements DesignRenderer {
                 switch (component) {
                     case TextBox t -> renderText(html, t, theme);
                     case ShapeBox s -> renderShape(html, s, theme);
-                    case ImageBox i -> renderImage(html, i, theme);
+                    case ImageBox i -> renderImage(html, i, theme, assetsById);
                 }
             }
             html.append("</div>");
@@ -91,7 +108,21 @@ public class HtmlDesignRenderer implements DesignRenderer {
         html.append("<div class=\"cmp\" style=\"").append(css).append("\"></div>");
     }
 
-    private void renderImage(StringBuilder html, ImageBox box, Theme theme) {
+    private void renderImage(StringBuilder html, ImageBox box, Theme theme, Map<String, Asset> assetsById) {
+        Asset asset = box.assetId() == null ? null : assetsById.get(box.assetId());
+        if (asset != null) {
+            String dataUri = dataUriOf(asset);
+            if (dataUri != null) {
+                html.append("<img class=\"cmp\" style=\"").append(frameCss(box.frame()))
+                        .append("object-fit:cover;\" src=\"").append(dataUri).append("\" alt=\"")
+                        .append(escape(box.altText() == null ? "" : box.altText())).append("\"/>");
+                return;
+            }
+        }
+        renderPlaceholder(html, box, theme);
+    }
+
+    private void renderPlaceholder(StringBuilder html, ImageBox box, Theme theme) {
         String css = frameCss(box.frame())
                 + "border:1px dashed " + colorOf(theme, "divider", "#ccc") + ";"
                 + "background:" + colorOf(theme, "surface", "#f4f4f4") + ";"
@@ -100,6 +131,32 @@ public class HtmlDesignRenderer implements DesignRenderer {
         String label = box.altText() == null || box.altText().isBlank() ? "Image" : box.altText();
         html.append("<div class=\"cmp\" style=\"").append(css).append("\">")
                 .append(escape(label)).append("</div>");
+    }
+
+    private String dataUriOf(Asset asset) {
+        try {
+            byte[] bytes = storageService.retrieve(asset.storedRef());
+            String mime = mimeTypeOf(asset.storedRef());
+            return "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(bytes);
+        } catch (RuntimeException e) {
+            log.warn("Could not embed asset {} ({}) for HTML preview; using placeholder",
+                    asset.id(), asset.storedRef(), e);
+            return null;
+        }
+    }
+
+    private static String mimeTypeOf(String ref) {
+        String lower = ref == null ? "" : ref.toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (lower.endsWith(".gif")) {
+            return "image/gif";
+        }
+        if (lower.endsWith(".bmp")) {
+            return "image/bmp";
+        }
+        return "image/png";
     }
 
     private static String frameCss(Frame frame) {
