@@ -231,6 +231,8 @@
         <th:block th:if="${design != null}">
             <p class="check-stats"
                th:text="|${design.pageCount()} page(s) laid out, ${design.componentCount()} component(s) placed.|">stats</p>
+            <a class="button" th:href="@{|/design/${result.jobId()}/export.pptx|}">Download PPTX</a>
+            <a class="button" th:href="@{|/design/${result.jobId()}/export.pdf|}">Download PDF</a>
             <iframe th:if="${designHtml != null}" class="design-preview" th:attr="srcdoc=${designHtml}"></iframe>
         </th:block>
 

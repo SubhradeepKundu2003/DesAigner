@@ -329,16 +329,101 @@ criterion (the design visible end-to-end) is met.
   not the 2.x package — the 2.x import compiles as a phantom-looking IDE
   error but is really just the wrong artifact.
 
-**Next up → Phase B: PPTX renderer** (POI already present — page→slide with
-custom slide size = page size, pt→EMU, `TextBox`→text shape, `ImageBox`→picture),
-**then PDF** (v1: HTML renderer output → openhtmltopdf, new dep). Also still
-open: Agents #1–#5 unit tests (only #6 and #7 have them), DB persistence
-(everything is still in-memory, returned in the HTTP response), the
-flag-resolution endpoint, and Agent #8 (graphics — real images instead of the
-icon-dot/placeholder stand-ins) + Agent #9 (review). LLM-output lessons carry
-forward unchanged (lists → bare arrays, long prose → plain-text protocol,
-null-guard optional fields) — Agent #7 added no new ones since it makes no
-LLM calls at all.
+**Phase B PPTX renderer DONE (2026-07-05):** `render/pptx/PptxDesignRenderer`
+(POI XSLF) is built, unit-tested, and **verified live e2e** (booted on port
+8090, Postgres + Ollama): `POST /run` on the sample docx → `GET
+/design/{jobId}/export.pptx` downloaded a real `.pptx` (confirmed via `file`
+and by parsing it back with POI) — 1 slide, page size 595×842pt matching the
+theme, all 12 components present with correct text and positions, including
+the STAT_CALLOUT "72"/"NPS:72" pair and multi-paragraph article bodies.
+
+**Phase B facts:**
+- No manual pt→EMU math needed: XSLF shape anchors (`Rectangle2D`) and
+  `XMLSlideShow.setPageSize(Dimension)` are already expressed in points in the
+  POI API — the same unit the design model uses — so `Frame` values pass
+  straight through. (`Dimension` is int-only, so the theme's page size is
+  rounded to the nearest point for the slide size.)
+- `TextBox` → `XSLFTextBox`, one `XSLFTextParagraph`/run per `\n`-separated
+  line (font/size/bold/color from the `TextStyle` the `styleRef` names,
+  falling back to a default style same as the HTML renderer); insets zeroed
+  via `Insets2D` (not `java.awt.Insets` — POI has its own type) to match the
+  HTML renderer's zero-padding boxes.
+- `ShapeBox` → `XSLFAutoShape` (`ShapeType.ELLIPSE` for `"circle"`, else
+  `RECT`), filled from the theme color role, no line.
+- `ImageBox` → real `XSLFPictureShape` when `assetId` resolves through
+  `document.assets()` **and** `StorageService.retrieve()` succeeds (picture
+  type sniffed from the stored ref's extension); otherwise a dashed
+  placeholder `XSLFAutoShape` with centered alt-text, matching the HTML
+  renderer's placeholder. Failure isolation: a `StorageService` failure is
+  caught and logged, falling back to the placeholder rather than failing the
+  whole export — since Agent #8 (graphics) doesn't exist yet, every
+  `ImageBox` today takes the placeholder path; the real-picture path is
+  exercised only by `PptxDesignRendererTest`.
+- Dev-harness wiring (not the real Phase C editor API): `PipelineViewController`
+  keeps an in-memory `Map<jobId, DesignDocument>` populated by `/run` and
+  serves it from `GET /design/{jobId}/export.pptx` via `RendererRegistry`, so
+  `result.html` can offer a "Download PPTX" link right next to the HTML
+  preview. This cache is intentionally throwaway — real persistence
+  (Postgres jsonb + revision) is still Phase C.
+- Unit tests (`PptxDesignRendererTest`, 3 tests, all green): parses the
+  rendered bytes back with POI and asserts on actual shapes (types, anchors,
+  text, embedded picture bytes) rather than just checking for non-empty
+  output; a fake `StorageService` also covers the retrieval-failure →
+  placeholder fallback path.
+
+**Phase B PDF renderer DONE (2026-07-05):** `render/pdf/PdfDesignRenderer` is
+built, unit-tested, and **verified live e2e** (booted on port 8091, Postgres +
+Ollama): `POST /run` on the small sample docx (~64s full pipeline) → `GET
+/design/{jobId}/export.pdf` returned a real `application/pdf`; rasterized it
+with `pdfbox-app` and visually confirmed the page matches the HTML preview —
+blue serif issue title, circular section-icon dots, HERO leadership message,
+divider, and the STAT_CALLOUT "72"/"NPS:72" pair, all positioned correctly on
+a 595×842pt page.
+
+**PDF renderer facts:**
+- v1 strategy as planned: the PDF renderer feeds the **HTML renderer's output**
+  through openhtmltopdf. Dependency is
+  `io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.40` — the **maintained
+  fork on the PDFBox 3.x line** (matches our pdfbox 3.0.5; the original
+  `com.openhtmltopdf` artifacts are stuck on PDFBox 2.x and would clash). The
+  fork kept the original `com.openhtmltopdf.*` package names, and
+  `useFastMode()` is deprecated there because fast mode is the default.
+- `PdfDesignRenderer` calls `HtmlDesignRenderer.renderHtml(document, extraCss)`
+  (new public hook; `render()` delegates to it with `""`) with a print
+  stylesheet appended after the base rules: `@page { size: <theme page size>;
+  margin: 0 }`, `.page { margin:0; box-shadow:none;
+  page-break-before:always }` + `.page:first-child { page-break-before:auto }`
+  (break-*before* so no trailing blank page — the unit test asserts *exact*
+  page counts to guard that regression).
+- `HtmlDesignRenderer` changes made for this (all no-ops in browsers):
+  emits **well-formed XHTML** (`<meta …/>` self-closed) because openhtmltopdf
+  parses strict XML; **font-family now appends a generic fallback**
+  (`SansSerif,sans-serif` / `Serif,serif` via a name heuristic) so the PDF
+  maps logical theme font names to Helvetica/Times instead of an arbitrary
+  default; **circle border-radius is a pt length** (`min(w,h)/2`) instead of
+  `50%`, which openhtmltopdf handles unreliably.
+- Known cosmetic gap: the ImageBox placeholder centers its label with
+  `display:flex`, which openhtmltopdf ignores (treated as block) — in the PDF
+  the label sits top-left inside the dashed box. Placeholder-only; goes away
+  when Agent #8 supplies real images.
+- Dev-harness export endpoint generalized:
+  `GET /design/{jobId}/export.{extension}` (pptx | pdf | html via
+  `ExportFormat.valueOf`, 404 on unknown extension), correct Content-Type per
+  format; `result.html` now has a "Download PDF" link next to the PPTX one.
+- Unit tests (`PdfDesignRendererTest`, 3 tests, all green; whole design/render
+  suite 17/17): parse the rendered bytes back with PDFBox `Loader`, assert
+  media box 595×842pt, exact page counts (1-page and 2-page fixtures), and
+  per-page extracted text (`PDFTextStripper` with start/end page).
+
+**Next up → Phase C: persistence + editor API** (§3.10 — persist
+`DesignDocument` as Postgres jsonb with revision, editor REST CRUD + export
+endpoint, move the fact-validation export gate there; the natural moment to
+finally do DB persistence). Also still open: Agents #1–#5 unit tests (only
+#6, #7, and the PPTX/PDF renderers have them), the flag-resolution endpoint,
+and Agent #8 (graphics — real images instead of the icon-dot/placeholder
+stand-ins) + Agent #9 (review). LLM-output lessons carry forward unchanged
+(lists → bare arrays, long prose → plain-text protocol, null-guard optional
+fields) — neither renderer makes LLM calls.
 
 ---
 
@@ -353,8 +438,9 @@ LLM calls at all.
       Ollama probe): `qwen3.5:4b` returned correctly classified content items.
 - [ ] Add document-parsing deps: Apache POI (xlsx/docx/pptx), Apache PDFBox (pdf),
       optionally Apache Tika as a unified fallback extractor.
-- [ ] Add openhtmltopdf for the PDF renderer (when §3.10 PDF lands; PPTX needs
-      no new dep — POI is present). ~~Templating engine for HTML newsletter
+- [x] Add openhtmltopdf for the PDF renderer →
+      `io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.40` (maintained fork,
+      PDFBox 3.x line). ~~Templating engine for HTML newsletter
       layout~~ — obsolete: the newsletter is a Design Model, not a template
       render; Thymeleaf (already added) serves the dev web UI only.
 - [ ] Externalize secrets/config: DB creds (and Ollama URL) via env vars in
@@ -626,12 +712,23 @@ deliverable.
 - [x] **HTML renderer** (`render/html/`): fixed-size page divs, absolutely
       positioned children, theme → inline CSS. Faithful print/preview pages —
       deliberately *not* responsive email HTML. (Built in Phase A with §3.7.)
-- [ ] **PPTX renderer** (`render/pptx/`): POI XSLF — page → slide (custom slide
-      size = page size), pt → EMU, TextBox → text shape, ImageBox → picture.
-      Output natively editable in PowerPoint.
-- [ ] **PDF renderer** (`render/pdf/`): v1 = HTML renderer output →
-      openhtmltopdf (new dep; absolute-positioned HTML converts reliably).
-      Direct PDFBox drawing is the v2 option if fidelity demands it.
+- [x] **PPTX renderer** (`render/pptx/`): POI XSLF — page → slide (custom slide
+      size = page size; POI's shape anchors are already in points, no manual
+      EMU math needed), TextBox → text shape, ShapeBox → auto shape,
+      ImageBox → picture (or a dashed placeholder until Agent #8 fills
+      assets). Output natively editable in PowerPoint. Unit-tested
+      (`PptxDesignRendererTest`) and verified live e2e via a "Download PPTX"
+      link in the dev UI (`GET /design/{jobId}/export.pptx`, backed by an
+      in-memory jobId→DesignDocument cache — real persistence is still below).
+- [x] **PDF renderer** (`render/pdf/`): v1 = HTML renderer output →
+      openhtmltopdf (`io.github.openhtmltopdf` fork, PDFBox 3.x line;
+      absolute-positioned XHTML converts reliably — print CSS pins the
+      `@page` box to the theme page size and turns each `div.page` into one
+      full-bleed PDF page). Direct PDFBox drawing stays the v2 option if
+      fidelity demands it. Unit-tested (`PdfDesignRendererTest` parses the
+      bytes back with PDFBox) and verified live via the "Download PDF" link
+      (`GET /design/{jobId}/export.pdf` — export endpoint generalized to
+      `export.{extension}`).
 - [ ] Persist `DesignDocument` as Postgres `jsonb` (+ jobId, revision,
       timestamps) — the natural moment to finally do DB persistence.
 - [ ] Editor REST API: `GET /api/designs/{id}` (load), `PUT /api/designs/{id}`

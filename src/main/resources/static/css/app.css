@@ -149,6 +149,19 @@ details.deferred summary { cursor: pointer; color: #666; }
     background: #e5e7eb;
 }
 
+.button {
+    display: inline-block;
+    padding: .45rem .9rem;
+    background: #2563eb;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 5px;
+    font-size: .88rem;
+    font-weight: 600;
+}
+
+.button:hover { background: #1d4ed8; }
+
 a.back { display: inline-block; margin-top: 2rem; color: #2563eb; text-decoration: none; }
 
 /* Error page */

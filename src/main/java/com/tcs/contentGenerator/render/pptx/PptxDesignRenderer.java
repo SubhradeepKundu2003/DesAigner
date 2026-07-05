@@ -102,7 +102,7 @@ public class PptxDesignRenderer implements DesignRenderer {
         TextStyle style = theme.textStyles().getOrDefault(box.styleRef(), DEFAULT_STYLE);
         XSLFTextBox shape = slide.createTextBox();
         shape.setAnchor(rectangle(box.frame()));
-        shape.setInsets(new Insets(0, 0, 0, 0));
+        shape.setInsets(new Insets2D(0, 0, 0, 0));
         shape.setWordWrap(true);
         shape.clearText();
 
@@ -158,7 +158,7 @@ public class PptxDesignRenderer implements DesignRenderer {
         shape.setLineWidth(1.0);
         shape.setLineDash(LineDash.DASH);
         shape.setVerticalAlignment(VerticalAlignment.MIDDLE);
-        shape.setInsets(new Insets(0, 0, 0, 0));
+        shape.setInsets(new Insets2D(0, 0, 0, 0));
 
         String label = box.altText() == null || box.altText().isBlank() ? "Image" : box.altText();
         XSLFTextParagraph paragraph = shape.addNewTextParagraph();
