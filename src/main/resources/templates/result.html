@@ -181,6 +181,62 @@
         <p class="empty" th:if="${validation == null}">The fact validation agent did not run.</p>
     </div>
 
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #6 output -->
+    <div class="stage" th:with="compliance=${result.compliance()}">
+        <h2>Agent #6 — Brand Compliance
+            <span class="badge" th:if="${compliance != null}"
+                  th:text="|${compliance.violations().size()} violation(s)|">0</span>
+        </h2>
+
+        <th:block th:if="${compliance != null}">
+            <p class="check-stats"
+               th:text="|${compliance.articlesChecked()} article(s) checked against the brand rulebook, ${compliance.articlesFixed()} corrected in place, ${compliance.unresolved()} breach(es) left for an editor.|">stats</p>
+
+            <table th:if="${!compliance.violations().isEmpty()}">
+                <thead>
+                    <tr><th>Type</th><th>Section</th><th>Article</th><th>Found</th><th>Replacement</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="v : ${compliance.violations()}">
+                        <td><span class="cat" th:text="${v.type()}">Terminology</span></td>
+                        <td th:text="${v.section()}">section</td>
+                        <td th:text="${v.article()}">article</td>
+                        <td class="claim" th:text="${v.found()}">found</td>
+                        <td class="claim" th:text="${v.replacement().isEmpty()} ? '—' : ${v.replacement()}">replacement</td>
+                        <td>
+                            <span class="fix ok" th:if="${v.fixed()}">&#10003; fixed</span>
+                            <span class="fix pending" th:unless="${v.fixed()}">needs editor</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="empty" th:if="${compliance.violations().isEmpty()}">
+                Every article complies with the brand rulebook.
+            </p>
+        </th:block>
+
+        <p class="empty" th:if="${compliance == null}">The brand compliance agent did not run.</p>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <!-- Agent #7 output -->
+    <div class="stage" th:with="design=${result.design()}">
+        <h2>Agent #7 — Design Composition
+            <span class="badge" th:if="${design != null}" th:text="|${design.pageCount()} page(s)|">0</span>
+        </h2>
+
+        <th:block th:if="${design != null}">
+            <p class="check-stats"
+               th:text="|${design.pageCount()} page(s) laid out, ${design.componentCount()} component(s) placed.|">stats</p>
+            <iframe th:if="${designHtml != null}" class="design-preview" th:attr="srcdoc=${designHtml}"></iframe>
+        </th:block>
+
+        <p class="empty" th:if="${design == null}">The design composition agent did not run.</p>
+    </div>
+
     <a th:replace="~{fragments/page :: back}"></a>
 </body>
 </html>

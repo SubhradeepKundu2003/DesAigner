@@ -67,6 +67,36 @@ app:
     # Cap on source-material characters fed to one fact-check prompt, so the
     # prompt (source + article) stays inside num-ctx above.
     max-source-chars: 6000
+  compliance:
+    # The brand rulebook (agent #6). Editors tune these lists, not code.
+    # All matching is whole-word; terminology and banned-phrases match any
+    # casing, proper-names flag any casing other than the one written here.
+    rules:
+      # Banned term -> approved replacement (deterministic, case-preserving fix).
+      terminology:
+        "[e-mail]": email
+        "[utilize]": use
+        "[utilise]": use
+        "[in order to]": to
+        "[work force]": workforce
+        "[client-facing]": customer-facing
+      # Canonical spellings of brand/product names; wrong casing is corrected.
+      proper-names:
+        - TD Monthly
+        - PowerPoint
+        - PostgreSQL
+        - SharePoint
+      # Buzzwords with no drop-in replacement; an article containing one gets a
+      # single LLM rewrite (kept only if the wording is gone and no figures changed).
+      banned-phrases:
+        - synergy
+        - synergies
+        - best-in-class
+        - world-class
+        - cutting-edge
+        - game-changer
+        - low-hanging fruit
+        - paradigm shift
 server:
   port: 8090
   error:

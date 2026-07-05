@@ -25,6 +25,14 @@ The system turns uploaded business documents (Excel, Word, PDF, PowerPoint)
 into a professionally designed monthly newsletter via a pipeline of specialized
 agents coordinated by an orchestrator.
 
+**Deliverable (decided 2026-07-04): an *editable* newsletter, not email HTML.**
+The pipeline produces a renderer-independent **Design Model** (JSON design
+tree — pages, positioned text/image/shape components, theme). That model is
+the single source of truth: a future Angular visual editor (Canva /
+PowerPoint-Online-style) loads and edits it, and dedicated renderer classes
+export it as **PPTX, PDF, and HTML**. See "Design Model architecture" before
+§3.7.
+
 ---
 
 ## Current State (handoff — read this first)
@@ -144,13 +152,60 @@ for export" branch verified too; flag output varies run to run, small model).
   this is noise, not a gate problem. Tune `ValidationPrompts.SYSTEM` if it gets
   worse.
 
+Agent #6 (Brand Compliance) is built, compiles, has **unit tests** (the first
+in the repo — `BrandComplianceAgentTest`, 6 tests, LLM stubbed, all green via
+`./mvnw test -Dtest=BrandComplianceAgentTest`), and is **verified live e2e**
+(booted on port 8091, Postgres + Ollama): a clean run returned
+`compliance: {articlesChecked: 2, violations: []}`; a second run with a
+casing rule injected via `SPRING_APPLICATION_JSON` (canonical `APOLLO`) caught
+"Apollo" in both articles, auto-fixed them (`articlesFixed: 2`, headline and
+body now say APOLLO), and the web UI rendered the Agent #6 stage with the
+violations table and "✓ fixed" chips.
+
+**Agent #6 facts:**
+- Package `agent/compliance/`: `BrandComplianceAgent` (`@Order(6)`),
+  `ComplianceRules` (`@ConfigurationProperties("app.compliance.rules")` record
+  — the app class now has `@ConfigurationPropertiesScan`), `ViolationType`
+  (TERMINOLOGY / CASING / BANNED_PHRASE), `ComplianceViolation`,
+  `ComplianceReport` (violations + articlesChecked/articlesFixed +
+  `unresolvedCount()`), `CompliancePrompts`.
+- The rulebook lives in `application.yaml` under `app.compliance.rules`:
+  `terminology` (banned term → replacement; **map keys use `"[bracket]"`
+  notation** or Spring's relaxed binding strips spaces from keys like
+  `"in order to"`), `proper-names` (canonical casing), `banned-phrases`
+  (buzzwords with no drop-in replacement).
+- Fix strategy, cheapest first: (1) terminology → deterministic case-preserving
+  substitution (ALL-CAPS match → ALL-CAPS replacement, Capitalized →
+  Capitalized); (2) casing → deterministic correction to canonical; (3) banned
+  phrases → **one LLM rewrite call per affected article** (plain-text
+  headline/body protocol, same as generation), accepted only if the banned
+  wording is actually gone, the body survived parsing, AND the rewrite's
+  number tokens ⊆ the original's (fact validation already ran — a rewrite must
+  not invent figures behind its back). Rejected/failed rewrite → article keeps
+  its deterministically-fixed text, violation reported `fixed: false` ("needs
+  editor" in the UI). All matching is whole-word regex, patterns compiled once
+  in the constructor.
+- The agent **replaces** the `GeneratedNewsletter` on the context with the
+  corrected articles (so the Agent #4 stage in `result.html` shows post-fix
+  text); the `ComplianceReport` is the record of what changed. No export gate
+  — breaches are editorial, not factual.
+- `PipelineContext` carries `ComplianceReport`; `IngestionResponse` gained a
+  `compliance` field (ComplianceSummary → ViolationSummary). `result.html`
+  renders the stage (stats line + violations table with `.fix.ok`/`.fix.pending`
+  chips in `app.css`); `index.html` lists agent #6.
+- Live-test trick: rules are config, so a guaranteed-hit rule can be injected
+  without code changes via `SPRING_APPLICATION_JSON` (note:
+  `-Dspring-boot.run.arguments=--a,--b` comma-splitting did NOT work with this
+  plugin version — the whole string landed in the first property).
+
 **Thymeleaf is now properly integrated (no longer "temporary"):**
 - Shared fragments in `templates/fragments/page.html` (`head(title)` fragment +
   `back` link); all styling moved to `static/css/app.css`; `templates/error.html`
   replaces the whitelabel error page (`server.error.include-message: always`
-  set for dev). `result.html` shows all three agents' output; `index.html`
-  lists the three-agent chain. Thymeleaf stays as the templating engine for the
-  Layout & Design agent's HTML newsletter later (see pom comment).
+  set for dev). `result.html` shows all agents' output; `index.html` lists the
+  agent chain. Thymeleaf serves the **dev web UI only** — the newsletter itself
+  is produced by the Design Model + renderers (see §3.7+), not by Thymeleaf
+  templates (the pom comment saying otherwise predates this decision).
 
 **AI layer facts:**
 - Provider-agnostic LLM boundary lives in `llm/`: `LlmClient` interface
@@ -196,10 +251,10 @@ for export" branch verified too; flag output varies run to run, small model).
 - **Each agent = its own package** under `agent/`. Ingestion is `agent/ingestion/`.
 - **AI not wired yet** — Spring AI + Ollama starter still needs adding (Phase 0).
 
-**Not done:** Agents #1–#5 automated unit tests; DB persistence of results
-(in-memory only, returned in HTTP response); flag *resolution* (the gate reports
-`exportBlocked` but there is no endpoint to resolve/waive flags yet — belongs
-with Phase 4 API work); Agents #6–#10.
+**Not done:** Agents #1–#5 automated unit tests (#6 has them); DB persistence
+of results (in-memory only, returned in HTTP response); flag *resolution* (the
+gate reports `exportBlocked` but there is no endpoint to resolve/waive flags
+yet — belongs with Phase 4 API work); Agents #7–#10.
 
 **Performance note (observed live):** with `num-ctx: 8192` and chunking, a large
 docx (93 blocks → 2 chunks) took ~9.5 min *per understanding chunk* on this
@@ -208,14 +263,82 @@ docx runs the whole 4-agent pipeline in ~90s. Generation calls are short
 (~150-word outputs, ~25s each). Budget accordingly when testing with the big
 `samples/TD_Monthly_SourcePack_June2026.docx`.
 
-**Next up → Agent #6 (Brand Compliance):** apply writing guidelines + approved
-terminology from a rules config file (start simple: a YAML/properties list of
-banned terms → preferred replacements, casing rules for product/brand names),
-check the generated articles, report violations and auto-fix where safe
-(deterministic string checks first; LLM only if a rewrite is needed). New
-`agent/compliance/` package. LLM-output lessons so far: lists → bare arrays
-(`Foo[]`), long prose → plain text protocol (see Agent #4 facts), optional
-string fields may come back empty — always null-guard.
+Agent #7 (Design Composition) is built, compiles, has **unit tests** (Jackson
+round-trip on the shared `design/` model + `LayoutEngineTest`'s layout
+invariants — no overlaps, frames inside margins, all articles placed,
+pagination fires — 5 tests total, all green), and is **verified live e2e**
+(booted on port 8090, Postgres + Ollama): `POST /api/ingest` on the sample
+`.docx` returned `design: {pageCount: 1, componentCount: 12}` — a HERO
+Leadership Message plus a STAT_CALLOUT Delivery Highlights article (the
+`NPS:72` key metric correctly triggered the stat pattern, showing "72" /
+"NPS:72" side by side). The web UI (`POST /run`) embeds the rendered HTML
+live via an `<iframe srcdoc>` in the Agent #7 stage — Phase A's exit
+criterion (the design visible end-to-end) is met.
+
+**Agent #7 facts:**
+- Shared **`design/`** package (peer of `document/`): sealed `Component`
+  (`TextBox | ImageBox | ShapeBox`, `@JsonTypeInfo(use = DEDUCTION)` so the
+  JSON round-trips without a synthetic type field — Jackson infers the
+  subtype from each record's distinct field set), `Frame`, `ComponentRole`,
+  `SourceLink` (section title + article headline — the same natural-key
+  provenance pattern validation/compliance already use, not a synthetic id),
+  `TextStyle`, `PageSize`, `Spacing`, `Theme`, `Asset`, `Page`, `DesignMeta`,
+  `DesignDocument` (schemaVersion, revision, meta, theme, assets, pages).
+- Package `agent/design/`: `DesignCompositionAgent` (`@Order(7)`) —
+  **pattern selection is rule-based, not an LLM call** (no cost at this
+  stage): `LEADERSHIP_MESSAGE`→HERO, `UPCOMING_EVENTS`→EVENT_LIST, a single
+  article with a numeric key metric→STAT_CALLOUT (value/label pulled via the
+  same numeric regex fact-validation uses), exactly 2 articles→TWO_COLUMN,
+  else STANDARD. `IconMatcher` deterministically maps each `NewsletterSection`
+  to a theme color role (a colored dot stands in for real iconography until
+  Agent #8 sources actual images). `TemplateCatalog` loads
+  `DesignTemplate` (name + `Theme`) from
+  `resources/design-templates/td-classic.json` (A4 portrait, one template).
+  `CompositionPlan`/`SectionComposition` carry the semantic plan — **no
+  coordinates yet**.
+- Package `agent/design/layout/`: `LayoutEngine` (100% deterministic, no LLM)
+  turns the `CompositionPlan` into positioned pages — one method per pattern,
+  measuring text via `TextMeasurer` (AWT `FontMetrics` against a scratch
+  `Graphics2D`, estimate only, every renderer wraps natively at render time)
+  and tracking the cursor via `Paginator` (starts a new page when a component
+  doesn't fit; `OverflowResolver` clamps a component's height to what a whole
+  page could ever hold when it's bigger than that — logged, and by design the
+  clamped component still visually overflows its frame until a human edits it
+  in the future editor — an accepted v1 trade-off, not a bug).
+- **Render `render/`**: `DesignRenderer` interface + `RendererRegistry`
+  (same registry-over-a-list pattern as `ExtractorRegistry`) + `ExportFormat`
+  (HTML implemented; PPTX/PDF are enum values only, Phase B). `render/html/HtmlDesignRenderer`
+  emits a standalone HTML doc — one `div.page` per page, `pt`-unit
+  absolutely-positioned `div.cmp` children (CSS `pt` *is* our model's unit,
+  no conversion needed), theme colors/styles inlined. Deliberately
+  print/preview-style, not responsive — this is not the editor.
+- `PipelineContext` carries `DesignDocument` (get/setDesignDocument; null
+  until agent #7 runs). `IngestionResponse` gained a `design` field
+  (`DesignSummary(pageCount, componentCount)`). The web UI doesn't put the
+  raw HTML through `IngestionResponse` (JSON API callers don't need a
+  megabyte of markup) — `PipelineViewController` renders it separately via
+  `HtmlDesignRenderer` into a `designHtml` model attribute, embedded through
+  `<iframe th:attr="srcdoc=${designHtml}">` (Thymeleaf HTML-escapes the
+  attribute value by default, which is exactly what a `srcdoc` needs).
+- **Gotcha for future Jackson use anywhere in this repo:** this project is on
+  **Jackson 3.x** (Spring Boot 4.1 pulls `tools.jackson.core:jackson-databind`,
+  *not* `com.fasterxml.jackson.databind`) — the base package renamed from
+  `com.fasterxml.jackson.*` to `tools.jackson.*` (annotations stayed at
+  `com.fasterxml.jackson.annotation`, only core/databind moved). Import
+  `tools.jackson.databind.ObjectMapper` / `tools.jackson.databind.json.JsonMapper`,
+  not the 2.x package — the 2.x import compiles as a phantom-looking IDE
+  error but is really just the wrong artifact.
+
+**Next up → Phase B: PPTX renderer** (POI already present — page→slide with
+custom slide size = page size, pt→EMU, `TextBox`→text shape, `ImageBox`→picture),
+**then PDF** (v1: HTML renderer output → openhtmltopdf, new dep). Also still
+open: Agents #1–#5 unit tests (only #6 and #7 have them), DB persistence
+(everything is still in-memory, returned in the HTTP response), the
+flag-resolution endpoint, and Agent #8 (graphics — real images instead of the
+icon-dot/placeholder stand-ins) + Agent #9 (review). LLM-output lessons carry
+forward unchanged (lists → bare arrays, long prose → plain-text protocol,
+null-guard optional fields) — Agent #7 added no new ones since it makes no
+LLM calls at all.
 
 ---
 
@@ -230,8 +353,10 @@ string fields may come back empty — always null-guard.
       Ollama probe): `qwen3.5:4b` returned correctly classified content items.
 - [ ] Add document-parsing deps: Apache POI (xlsx/docx/pptx), Apache PDFBox (pdf),
       optionally Apache Tika as a unified fallback extractor.
-- [ ] Add a PDF/HTML rendering dep for export (e.g. openhtmltopdf / Flying Saucer),
-      and a templating engine (Thymeleaf) for HTML newsletter layout.
+- [ ] Add openhtmltopdf for the PDF renderer (when §3.10 PDF lands; PPTX needs
+      no new dep — POI is present). ~~Templating engine for HTML newsletter
+      layout~~ — obsolete: the newsletter is a Design Model, not a template
+      render; Thymeleaf (already added) serves the dev web UI only.
 - [ ] Externalize secrets/config: DB creds (and Ollama URL) via env vars in
       `application.yaml` — no API key needed for local Ollama.
 - [ ] Configure PostgreSQL datasource + JPA (ddl-auto, dialect) in `application.yaml`.
@@ -360,7 +485,7 @@ context.
 - [ ] (Later) captions/callouts once the Layout agent needs them.
 
 ### 3.5 Fact Validation Agent  — DONE (live e2e verified)
-**Package `agent/validation/`:** `FactValidationAgent` (`@Order(5)`) — per
+**Package `agent/validation/`:** `FactValidationAgent` (`@Order(5)`)1 — per
 article: deterministic numeric cross-check + one LLM fact-check call (bare
 `ClaimFlag[]`) against source text resolved via `SourceTextResolver`
 (re-chunks the source doc deterministically, since provenance is chunk-level).
@@ -375,38 +500,161 @@ Deterministic Java gate on `app.validation.blocking-severity` (default high).
 - [ ] Flag resolution/waiver endpoint (Phase 4, needed before export can unblock).
 - [ ] Automated unit tests (currently verified manually only).
 
-### 3.6 Brand Compliance Agent
-- [ ] Apply writing guidelines + approved terminology (rules config file to start).
-- [ ] Enforce formatting standards, approved colors/fonts/logos.
-- [ ] Report violations + auto-fix where safe.
+### 3.6 Brand Compliance Agent  — DONE (live e2e verified + unit tests)
+**Package `agent/compliance/`:** `BrandComplianceAgent` (`@Order(6)`) — checks
+every generated article against `ComplianceRules` (bound from
+`app.compliance.rules` in `application.yaml`): terminology and name-casing
+breaches are fixed deterministically (case-preserving substitution, no LLM);
+banned buzzwords trigger one LLM rewrite per affected article, accepted only if
+the wording is gone and no figures were invented, else reported unfixed for an
+editor. Corrected articles replace the `GeneratedNewsletter` on the context.
 
-### 3.7 Layout & Design Agent
-- [ ] Select a newsletter template.
-- [ ] Arrange text, tables, charts, images into the template; balance hierarchy.
-- [ ] Produce a render-ready HTML/Thymeleaf model.
+- [x] Apply writing guidelines + approved terminology (rules config file to start).
+- [ ] Enforce formatting standards, approved colors/fonts/logos (visual rules —
+      belongs with the Layout & Design agent once there is layout to check).
+- [x] Report violations + auto-fix where safe (deterministic first, LLM rewrite
+      only for banned phrases, unsafe rewrites rejected).
+- [x] Unit tests (`BrandComplianceAgentTest` — deterministic fixes + rewrite
+      acceptance rules, LLM stubbed).
+- [x] Live end-to-end run through the Spring app — clean run + injected-rule
+      run (violations caught, auto-fixed, rendered in the web UI).
+
+### Design Model architecture (decided 2026-07-04 — governs §3.7–§3.10)
+
+**Goal:** an editable newsletter. The pipeline emits a **Design Model** (JSON
+design tree), a future Angular editor modifies it, renderer classes export it.
+Not an email-HTML generator.
+
+**Core decisions:**
+- **Absolute, page-based geometry.** Fixed-size pages with positioned frames
+  (x, y, w, h) — like PowerPoint slides. Flow layout would make drag/resize
+  editing and PPTX fidelity miserable. Unit = **points** (1/72"; PDF-native,
+  ×12,700 = PPTX EMU, maps to CSS px). The template defines the page size
+  (A4 portrait to start); PPTX slide size = page size, so one geometry drives
+  all renderers with exact fidelity — no per-format re-layout in v1.
+- **The LLM never produces geometry.** Semantics (pattern choice, pull-quotes)
+  may come from a model; every coordinate comes from deterministic Java.
+- **Shared model in `design/`** (peer of `document/`), sealed records,
+  Jackson-serializable — the JSON *is* the editor's API payload (one schema, no
+  drift): `DesignDocument` (schemaVersion, **revision** for optimistic locking,
+  meta, theme, assets, pages) → `Page` → `Component` (sealed: `TextBox` |
+  `ImageBox` | `ShapeBox`), each with id, **semantic `role`** (issueTitle,
+  sectionTitle, articleBody, sectionIcon, divider…), `frame`, z, locked, and
+  **`source` provenance** back to the article/content item (the #2–#5
+  fact-chain reaches into the final artifact). `Theme` = pageSize + named
+  color roles + named text styles + spacing scale; components reference styles
+  (`styleRef: "Body"`) with inline overrides, so theme-level restyling works.
+- **Templates are JSON resources** (`resources/design-templates/td-classic.json`
+  — theme + section patterns + slots), loaded by a `TemplateCatalog`; editable
+  without recompiling, later user-uploadable. Start with one template.
+- **Renderers in `render/`** behind a `DesignRenderer` interface +
+  `RendererRegistry` (same pattern as `ExtractorRegistry`). The Angular editor
+  is effectively a fourth renderer — it draws the JSON itself.
+- **Known v1 trade-off:** fixed geometry means no automatic content-aware
+  re-layout after human edits (delete an article → boxes don't reflow). The
+  pipeline lays out once; afterwards humans move boxes, like PowerPoint.
+
+**Build order:** Phase A = `design/` model + Agent #7 + HTML renderer (proves
+the model visually). Phase B = PPTX renderer (POI already present), then PDF.
+Phase C = persistence + design CRUD/export API (the editor's contract).
+Phase D = Agent #8 (graphics), Agent #9 (review).
+
+### 3.7 Design Composition Agent (+ Layout Engine + Design Model)  — DONE (live e2e verified + unit tests)
+**Package `agent/design/`** (`DesignCompositionAgent` `@Order(7)`,
+`TemplateCatalog`, `DesignTemplate`, `SectionPattern`, `IconMatcher`,
+`CompositionPlan`; deterministic `layout/` engine: `LayoutEngine`,
+`TextMeasurer`, `Paginator`, `OverflowResolver`) + shared **`design/`** model.
+Two halves: *composition* (semantic, LLM-optional — select template, assign
+each section a design pattern the template offers [hero lead story, two-column
+section, stat-callout strip, event list], match icons deterministically by
+category, optionally lift a key metric into a stat callout) and *layout*
+(geometric, 100% deterministic — measure text via AWT font metrics [estimate is
+fine, text wraps natively in every renderer], position frames from theme
+margins/gutters, paginate, resolve overflow) → `DesignDocument` on the context.
+
+- [x] Shared `design/` model: `DesignDocument`, `Page`, sealed `Component`
+      (`TextBox` | `ImageBox` | `ShapeBox`), `Frame`, `Theme`, `TextStyle`,
+      `Asset`, `SourceLink` — Jackson round-trip (serialize → deserialize →
+      equal) tested.
+- [x] `td-classic.json` template (A4 portrait theme + patterns) + `TemplateCatalog`.
+- [x] Composition: template selection, pattern per section, icon matching,
+      `CompositionPlan` (ordered, no coordinates).
+- [x] Layout Engine: text measurement, frame positioning, pagination, overflow
+      handling → positioned `DesignDocument`.
+- [x] HTML renderer (see §3.10) wired into the result page so the design is
+      visible end-to-end (Phase A exit criterion).
+- [x] Unit tests: layout invariants (no overlaps, frames inside margins, all
+      articles placed) on a fixture newsletter — deterministic, no LLM needed.
 
 ### 3.8 Image & Graphics Agent
-- [ ] Select relevant images from an approved repository.
-- [ ] (Optional / later) generate AI illustrations; create icons/callouts.
-- [ ] Optimize image size/quality for the output format.
+**Package `agent/graphics/`** (`ImageGraphicsAgent` `@Order(8)`,
+`AssetLibrary`, `ImageOptimizer`). Enriches the `DesignDocument`: fills image
+slots from two sources we already have — pictures extracted from source
+documents at ingestion (`ImageBlock.storedRef`) and an approved brand-asset
+directory; registers `Asset` entries; scales/optimizes for the page.
+
+- [ ] Approved-asset directory convention (`storage/assets/…` behind
+      `StorageService`) + `AssetLibrary` lookup.
+- [ ] Select images for image slots (source-doc images matched via provenance
+      first, brand assets as fallback); leave an explicit placeholder
+      component when nothing suitable exists (the editor is the fallback).
+- [ ] Resize/optimize (bounded dimensions, reasonable file size) at export.
+- [ ] (Dropped from scope: AI image generation.)
 
 ### 3.9 Review Agent
-- [ ] Grammar/spelling/readability checks over the assembled newsletter.
-- [ ] Validate formatting + branding consistency end-to-end.
-- [ ] Assign a quality score + itemized findings.
+**Package `agent/review/`** (`ReviewAgent` `@Order(9)`, `ReviewReport`,
+`LayoutLint`, `EditorialCheck`). Quality pass over the finished
+`DesignDocument`; findings point at component ids so the editor can show a
+review panel. Auto-fix only trivial mechanical issues; everything else is a
+finding.
 
-### 3.10 Export & Publishing Agent
-- [ ] Export to **PDF** (primary), **HTML**, **Word (.docx)**, **PowerPoint (.pptx)**.
-- [ ] Package for email distribution / internal portal.
-- [ ] Persist the final artifact + make it downloadable.
+- [ ] Deterministic layout lint: text overflow, overlapping frames, margin
+      violations, low-contrast text-on-fill, orphaned section title at page
+      bottom.
+- [ ] LLM editorial review over text boxes: grammar/spelling/readability —
+      bare-array findings DTO (per the extractJson lesson).
+- [ ] Quality score + itemized `ReviewReport` on the context, rendered in the
+      dev UI.
 
-## Phase 4 — API & (optional) UI
+### 3.10 Export, Persistence & Editor API (renderers, not an agent)
+**Packages `render/` + `web/`.** Mostly *not an agent* — infrastructure that
+runs on demand, **after** human editing. Export always renders the saved,
+possibly human-edited model: the pipeline's output is a draft, not the
+deliverable.
+
+- [x] `DesignRenderer` interface + `RendererRegistry` (+ `ExportFormat`).
+- [x] **HTML renderer** (`render/html/`): fixed-size page divs, absolutely
+      positioned children, theme → inline CSS. Faithful print/preview pages —
+      deliberately *not* responsive email HTML. (Built in Phase A with §3.7.)
+- [ ] **PPTX renderer** (`render/pptx/`): POI XSLF — page → slide (custom slide
+      size = page size), pt → EMU, TextBox → text shape, ImageBox → picture.
+      Output natively editable in PowerPoint.
+- [ ] **PDF renderer** (`render/pdf/`): v1 = HTML renderer output →
+      openhtmltopdf (new dep; absolute-positioned HTML converts reliably).
+      Direct PDFBox drawing is the v2 option if fidelity demands it.
+- [ ] Persist `DesignDocument` as Postgres `jsonb` (+ jobId, revision,
+      timestamps) — the natural moment to finally do DB persistence.
+- [ ] Editor REST API: `GET /api/designs/{id}` (load), `PUT /api/designs/{id}`
+      (save; revision check → 409 on conflict), `POST
+      /api/designs/{id}/export?format=pptx|pdf|html` (download), asset
+      serve/upload endpoints.
+- [ ] Move the fact-validation **export gate** here: export blocked while
+      unresolved HIGH flags exist (needs the flag-resolution endpoint, Phase 4).
+- [ ] (Deferred: Word `.docx` export; email packaging/distribution.)
+
+## Phase 4 — API & Angular Editor
 
 - [ ] REST endpoints: create job, upload docs, trigger pipeline, poll status,
       fetch/download result, resolve validation flags.
+- [ ] Design CRUD + export API (defined in §3.10 — load/save Design Model,
+      optimistic locking via `revision`, export endpoint).
 - [ ] DTOs + validation on all inputs.
 - [ ] Progress streaming (SSE/WebSocket).
-- [ ] Minimal web UI for upload → progress → review flags → download (later).
+- [ ] **Angular visual editor** (separate front-end app; Canva /
+      PowerPoint-Online-style): loads the Design Model JSON, renders it itself
+      (it is effectively a fourth renderer), lets users edit text, move/resize
+      components, replace icons/images, then saves the model back and triggers
+      export. The existing Thymeleaf pages remain as the dev harness.
 
 ## Phase 5 — Quality, Ops, Hardening
 
@@ -421,6 +669,9 @@ Deterministic Java gate on `app.validation.blocking-severity` (default high).
 
 ## Future Enhancements (from spec — not scheduled yet)
 
+- Content-aware re-layout in the editor (delete an article → page reflows);
+  v1 lays out once, then humans move boxes like PowerPoint.
+- Multiple / user-uploadable design templates (v1 ships `td-classic` only).
 - Personalized newsletters per business unit.
 - Multilingual generation.
 - SharePoint / Teams / Outlook integration.
@@ -440,7 +691,8 @@ Deterministic Java gate on `app.validation.blocking-severity` (default high).
 - [ ] Are source documents free-form, or is there a known monthly template we can
       exploit for more reliable extraction?
 - [ ] Where do approved brand assets (logos, colors, image repo) live today?
-- [ ] Which export format is the real deliverable vs. nice-to-have? (Assumed: PDF
-      primary.)
+- [x] Which export format is the real deliverable? → **An editable Design
+      Model** is the deliverable; PPTX / PDF / HTML are all first-class renderer
+      outputs of it (Word export deferred). Decided 2026-07-04.
 - [ ] Human-in-the-loop: is review/approval mandatory before publish, or fully auto?
 - [ ] Volume/scale: how many source docs per issue, how large?

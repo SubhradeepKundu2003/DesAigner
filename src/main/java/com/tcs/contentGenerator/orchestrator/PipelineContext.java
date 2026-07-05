@@ -3,10 +3,12 @@ package com.tcs.contentGenerator.orchestrator;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.tcs.contentGenerator.agent.compliance.ComplianceReport;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.planning.NewsletterPlan;
 import com.tcs.contentGenerator.agent.understanding.ContentItem;
 import com.tcs.contentGenerator.agent.validation.ValidationReport;
+import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.document.DocumentModel;
 import com.tcs.contentGenerator.storage.StoredFile;
 
@@ -16,8 +18,9 @@ import com.tcs.contentGenerator.storage.StoredFile;
  * normalized {@link DocumentModel}s, the understanding agent adds the classified
  * {@link ContentItem}s, the planning agent sets the {@link NewsletterPlan}, the
  * generation agent sets the {@link GeneratedNewsletter}, the fact validation
- * agent sets the {@link ValidationReport}, and later stages will add their own
- * fields.
+ * agent sets the {@link ValidationReport}, the brand compliance agent sets the
+ * {@link ComplianceReport} (and replaces the {@link GeneratedNewsletter} with
+ * the corrected text), and later stages will add their own fields.
  */
 public class PipelineContext {
 
@@ -28,6 +31,8 @@ public class PipelineContext {
     private NewsletterPlan newsletterPlan;
     private GeneratedNewsletter generatedNewsletter;
     private ValidationReport validationReport;
+    private ComplianceReport complianceReport;
+    private DesignDocument designDocument;
 
     public PipelineContext(String jobId, List<StoredFile> inputFiles) {
         this.jobId = jobId;
@@ -83,6 +88,24 @@ public class PipelineContext {
 
     public void setValidationReport(ValidationReport validationReport) {
         this.validationReport = validationReport;
+    }
+
+    /** {@code null} until the brand compliance agent has run. */
+    public ComplianceReport getComplianceReport() {
+        return complianceReport;
+    }
+
+    public void setComplianceReport(ComplianceReport complianceReport) {
+        this.complianceReport = complianceReport;
+    }
+
+    /** {@code null} until the design composition agent has run. */
+    public DesignDocument getDesignDocument() {
+        return designDocument;
+    }
+
+    public void setDesignDocument(DesignDocument designDocument) {
+        this.designDocument = designDocument;
     }
 
     /** Storage prefix under which extracted images for this job are kept. */

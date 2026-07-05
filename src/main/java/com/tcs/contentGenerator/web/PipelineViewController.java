@@ -1,5 +1,7 @@
 package com.tcs.contentGenerator.web;
 
+import java.nio.charset.StandardCharsets;
+
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.tcs.contentGenerator.orchestrator.PipelineContext;
 import com.tcs.contentGenerator.orchestrator.PipelineService;
+import com.tcs.contentGenerator.render.html.HtmlDesignRenderer;
 
 /**
  * Server-rendered web UI for the pipeline: upload documents, run the agent chain,
@@ -22,9 +25,11 @@ import com.tcs.contentGenerator.orchestrator.PipelineService;
 public class PipelineViewController {
 
     private final PipelineService pipeline;
+    private final HtmlDesignRenderer htmlRenderer;
 
-    public PipelineViewController(PipelineService pipeline) {
+    public PipelineViewController(PipelineService pipeline, HtmlDesignRenderer htmlRenderer) {
         this.pipeline = pipeline;
+        this.htmlRenderer = htmlRenderer;
     }
 
     @GetMapping("/")
@@ -36,6 +41,10 @@ public class PipelineViewController {
     public String run(@RequestParam("files") MultipartFile[] files, Model model) {
         PipelineContext context = pipeline.run(files);
         model.addAttribute("result", IngestionResponse.from(context));
+        if (context.getDesignDocument() != null) {
+            String html = new String(htmlRenderer.render(context.getDesignDocument()), StandardCharsets.UTF_8);
+            model.addAttribute("designHtml", html);
+        }
         return "result";
     }
 }

@@ -1,0 +1,161 @@
+package com.tcs.contentGenerator.agent.design.layout;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.tcs.contentGenerator.agent.design.CompositionPlan;
+import com.tcs.contentGenerator.agent.design.DesignTemplate;
+import com.tcs.contentGenerator.agent.design.SectionComposition;
+import com.tcs.contentGenerator.agent.design.SectionPattern;
+import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
+import com.tcs.contentGenerator.agent.planning.NewsletterSection;
+import com.tcs.contentGenerator.design.Component;
+import com.tcs.contentGenerator.design.DesignDocument;
+import com.tcs.contentGenerator.design.Frame;
+import com.tcs.contentGenerator.design.Page;
+import com.tcs.contentGenerator.design.PageSize;
+import com.tcs.contentGenerator.design.Spacing;
+import com.tcs.contentGenerator.design.TextBox;
+import com.tcs.contentGenerator.design.TextStyle;
+import com.tcs.contentGenerator.design.Theme;
+
+/**
+ * Layout invariants that must hold for every pattern the composition agent can
+ * pick, regardless of content — deterministic, no LLM needed. A deliberately
+ * small page size makes pagination fire across a handful of sections without
+ * needing paragraphs long enough to overflow any single component (which
+ * would trigger the accepted-tradeoff clamp path and is out of scope here).
+ */
+class LayoutEngineTest {
+
+    private static final double MARGIN = 10;
+    private static final double PAGE_WIDTH = 300;
+    private static final double PAGE_HEIGHT = 220;
+    private static final double EPSILON = 0.01;
+
+    private static DesignTemplate fixtureTemplate() {
+        Theme theme = new Theme(
+                new PageSize(PAGE_WIDTH, PAGE_HEIGHT),
+                Map.of("background", "#fff", "text", "#000", "primary", "#000",
+                        "secondary", "#000", "accent", "#000", "muted", "#000", "divider", "#ccc"),
+                Map.of(
+                        "IssueTitle", new TextStyle("SansSerif", 16, "bold", "text", 20),
+                        "SectionTitle", new TextStyle("SansSerif", 12, "bold", "text", 16),
+                        "HeroHeadline", new TextStyle("SansSerif", 12, "bold", "text", 16),
+                        "Headline", new TextStyle("SansSerif", 10, "bold", "text", 14),
+                        "Body", new TextStyle("SansSerif", 9, "normal", "text", 12),
+                        "Stat", new TextStyle("SansSerif", 18, "bold", "text", 22),
+                        "StatLabel", new TextStyle("SansSerif", 8, "normal", "text", 10),
+                        "EventItem", new TextStyle("SansSerif", 9, "normal", "text", 12)),
+                new Spacing(MARGIN, 8));
+        return new DesignTemplate("test", theme);
+    }
+
+    private static CompositionPlan fixturePlan() {
+        GeneratedArticle hero = new GeneratedArticle("Leadership headline",
+                "A short leadership message body with a couple of sentences of prose.", null);
+        SectionComposition heroSection = new SectionComposition(
+                NewsletterSection.LEADERSHIP_MESSAGE, SectionPattern.HERO, List.of(hero), "primary", null, null);
+
+        GeneratedArticle stat = new GeneratedArticle("Delivery headline",
+                "Customer satisfaction keeps climbing this quarter.", null);
+        SectionComposition statSection = new SectionComposition(
+                NewsletterSection.DELIVERY_HIGHLIGHTS, SectionPattern.STAT_CALLOUT, List.of(stat),
+                "primary", "72", "NPS score");
+
+        GeneratedArticle standardA = new GeneratedArticle("Project headline one",
+                "The first project update body describing recent progress in a few sentences.", null);
+        GeneratedArticle standardB = new GeneratedArticle("Project headline two",
+                "The second project update body describing a different milestone this month.", null);
+        SectionComposition standardSection = new SectionComposition(
+                NewsletterSection.PROJECT_UPDATES, SectionPattern.STANDARD,
+                List.of(standardA, standardB), "secondary", null, null);
+
+        GeneratedArticle colA = new GeneratedArticle("Customer story one",
+                "A short customer success story body for the first column.", null);
+        GeneratedArticle colB = new GeneratedArticle("Customer story two",
+                "A short customer success story body for the second column.", null);
+        SectionComposition twoColumnSection = new SectionComposition(
+                NewsletterSection.CUSTOMER_SUCCESS, SectionPattern.TWO_COLUMN,
+                List.of(colA, colB), "secondary", null, null);
+
+        GeneratedArticle eventA = new GeneratedArticle("Town hall",
+                "Join the quarterly town hall next week.", null);
+        GeneratedArticle eventB = new GeneratedArticle("Training day",
+                "A hands-on training day for the whole team.", null);
+        SectionComposition eventSection = new SectionComposition(
+                NewsletterSection.UPCOMING_EVENTS, SectionPattern.EVENT_LIST,
+                List.of(eventA, eventB), "secondary", null, null);
+
+        return new CompositionPlan("test",
+                List.of(heroSection, statSection, standardSection, twoColumnSection, eventSection));
+    }
+
+    @Test
+    void paginatesAcrossMultiplePages() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
+        assertTrue(document.pages().size() >= 2,
+                "expected the small test page to force pagination, got " + document.pages().size());
+    }
+
+    @Test
+    void framesStayWithinPageMargins() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
+        double maxX = PAGE_WIDTH - MARGIN;
+        double maxY = PAGE_HEIGHT - MARGIN;
+        for (Page page : document.pages()) {
+            for (Component c : page.components()) {
+                Frame f = c.frame();
+                assertTrue(f.x() >= MARGIN - EPSILON, page.id() + " " + c.id() + " x within left margin");
+                assertTrue(f.y() >= MARGIN - EPSILON, page.id() + " " + c.id() + " y within top margin");
+                assertTrue(f.x() + f.w() <= maxX + EPSILON, page.id() + " " + c.id() + " within right margin");
+                assertTrue(f.y() + f.h() <= maxY + EPSILON, page.id() + " " + c.id() + " within bottom margin");
+            }
+        }
+    }
+
+    @Test
+    void componentsOnTheSamePageDoNotOverlap() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
+        for (Page page : document.pages()) {
+            List<Component> components = page.components();
+            for (int i = 0; i < components.size(); i++) {
+                for (int j = i + 1; j < components.size(); j++) {
+                    Frame a = components.get(i).frame();
+                    Frame b = components.get(j).frame();
+                    assertTrue(!overlaps(a, b),
+                            page.id() + ": " + components.get(i).id() + " overlaps " + components.get(j).id());
+                }
+            }
+        }
+    }
+
+    @Test
+    void everyArticleIsPlacedSomewhere() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
+        List<String> allText = document.pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(TextBox.class::isInstance)
+                .map(c -> ((TextBox) c).text())
+                .toList();
+
+        for (SectionComposition section : fixturePlan().sections()) {
+            for (GeneratedArticle article : section.articles()) {
+                boolean found = allText.stream().anyMatch(text -> text.contains(article.headline()));
+                assertTrue(found, "expected to find headline \"" + article.headline() + "\" somewhere in the design");
+            }
+        }
+    }
+
+    private static boolean overlaps(Frame a, Frame b) {
+        boolean separated = a.x() + a.w() <= b.x() + EPSILON
+                || b.x() + b.w() <= a.x() + EPSILON
+                || a.y() + a.h() <= b.y() + EPSILON
+                || b.y() + b.h() <= a.y() + EPSILON;
+        return !separated;
+    }
+}

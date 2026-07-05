@@ -2,6 +2,8 @@ package com.tcs.contentGenerator.web;
 
 import java.util.List;
 
+import com.tcs.contentGenerator.agent.compliance.ComplianceReport;
+import com.tcs.contentGenerator.agent.compliance.ComplianceViolation;
 import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.generation.GeneratedSection;
@@ -11,6 +13,7 @@ import com.tcs.contentGenerator.agent.planning.SectionPlan;
 import com.tcs.contentGenerator.agent.understanding.ContentItem;
 import com.tcs.contentGenerator.agent.validation.ValidationFlag;
 import com.tcs.contentGenerator.agent.validation.ValidationReport;
+import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.document.DocumentModel;
 import com.tcs.contentGenerator.document.HeadingBlock;
 import com.tcs.contentGenerator.document.ImageBlock;
@@ -25,7 +28,9 @@ public record IngestionResponse(
         List<ContentItemSummary> contentItems,
         PlanSummary plan,
         NewsletterSummary newsletter,
-        ValidationSummary validation) {
+        ValidationSummary validation,
+        ComplianceSummary compliance,
+        DesignSummary design) {
 
     public record DocumentSummary(
             String filename,
@@ -90,6 +95,27 @@ public record IngestionResponse(
             String issue) {
     }
 
+    /** The brand-rule check: every breach found, and whether it was auto-fixed. */
+    public record ComplianceSummary(
+            int articlesChecked,
+            int articlesFixed,
+            long unresolved,
+            List<ViolationSummary> violations) {
+    }
+
+    public record ViolationSummary(
+            String section,
+            String article,
+            String type,
+            String found,
+            String replacement,
+            boolean fixed) {
+    }
+
+    /** The laid-out issue: how many pages/components the design composition agent produced. */
+    public record DesignSummary(int pageCount, int componentCount) {
+    }
+
     public static IngestionResponse from(PipelineContext context) {
         List<DocumentSummary> summaries = context.getDocuments().stream()
                 .map(IngestionResponse::summarize)
@@ -100,7 +126,38 @@ public record IngestionResponse(
         return new IngestionResponse(context.getJobId(), summaries, items,
                 summarize(context.getNewsletterPlan()),
                 summarize(context.getGeneratedNewsletter()),
-                summarize(context.getValidationReport()));
+                summarize(context.getValidationReport()),
+                summarize(context.getComplianceReport()),
+                summarize(context.getDesignDocument()));
+    }
+
+    private static DesignSummary summarize(DesignDocument document) {
+        if (document == null) {
+            return null;
+        }
+        int components = document.pages().stream().mapToInt(page -> page.components().size()).sum();
+        return new DesignSummary(document.pages().size(), components);
+    }
+
+    private static ComplianceSummary summarize(ComplianceReport report) {
+        if (report == null) {
+            return null;
+        }
+        List<ViolationSummary> violations = report.violations().stream()
+                .map(IngestionResponse::summarize)
+                .toList();
+        return new ComplianceSummary(report.articlesChecked(), report.articlesFixed(),
+                report.unresolvedCount(), violations);
+    }
+
+    private static ViolationSummary summarize(ComplianceViolation violation) {
+        return new ViolationSummary(
+                violation.sectionTitle(),
+                violation.articleHeadline(),
+                violation.type().label(),
+                violation.found(),
+                violation.replacement(),
+                violation.fixed());
     }
 
     private static ValidationSummary summarize(ValidationReport report) {
