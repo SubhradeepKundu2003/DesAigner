@@ -21,6 +21,7 @@ import com.tcs.contentGenerator.design.TextStyle;
 import com.tcs.contentGenerator.design.Theme;
 import com.tcs.contentGenerator.render.DesignRenderer;
 import com.tcs.contentGenerator.render.ExportFormat;
+import com.tcs.contentGenerator.render.font.BrandFontRegistry;
 import com.tcs.contentGenerator.storage.StorageService;
 
 /**
@@ -37,9 +38,11 @@ public class HtmlDesignRenderer implements DesignRenderer {
     private static final TextStyle DEFAULT_STYLE = new TextStyle("SansSerif", 10, "normal", "text", 14);
 
     private final StorageService storageService;
+    private final BrandFontRegistry fontRegistry;
 
-    public HtmlDesignRenderer(StorageService storageService) {
+    public HtmlDesignRenderer(StorageService storageService, BrandFontRegistry fontRegistry) {
         this.storageService = storageService;
+        this.fontRegistry = fontRegistry;
     }
 
     @Override
@@ -72,6 +75,7 @@ public class HtmlDesignRenderer implements DesignRenderer {
                 .append(";height:").append(pt(theme.pageSize().heightPt()))
                 .append(";margin:16px auto;box-shadow:0 1px 4px rgba(0,0,0,.3);overflow:hidden;}")
                 .append(".cmp{position:absolute;box-sizing:border-box;}")
+                .append(fontFaceRules())
                 .append(extraCss)
                 .append("</style></head><body>");
         for (Page page : document.pages()) {
@@ -156,6 +160,9 @@ public class HtmlDesignRenderer implements DesignRenderer {
         if (lower.endsWith(".bmp")) {
             return "image/bmp";
         }
+        if (lower.endsWith(".svg")) {
+            return "image/svg+xml";
+        }
         return "image/png";
     }
 
@@ -179,7 +186,28 @@ public class HtmlDesignRenderer implements DesignRenderer {
         String generic = lower.contains("mono") ? "monospace"
                 : lower.contains("serif") && !lower.contains("sans") ? "serif"
                 : "sans-serif";
-        return family + "," + generic;
+        // Single-quoted: this value is inlined into an HTML style="..." attribute
+        // (itself double-quoted), so a double-quoted family name here would
+        // prematurely close the attribute and break the XHTML the PDF renderer parses.
+        return "'" + family + "'," + generic;
+    }
+
+    /**
+     * Emits an {@code @font-face} rule per brand-font weight available from
+     * {@link BrandFontRegistry}, embedding the bytes as a base64 {@code data:}
+     * URL (no separate font-serving endpoint needed). Empty when no brand font
+     * file has been bundled yet — every consumer already falls back to
+     * {@link #fontFamilyCss} in that case.
+     */
+    private String fontFaceRules() {
+        StringBuilder css = new StringBuilder();
+        for (String weight : new String[] {"normal", "bold"}) {
+            fontRegistry.bytesFor(weight).ifPresent(bytes -> css.append("@font-face{font-family:\"")
+                    .append(fontRegistry.family()).append("\";font-weight:").append(weight)
+                    .append(";src:url(data:font/ttf;base64,")
+                    .append(Base64.getEncoder().encodeToString(bytes)).append(") format('truetype');}"));
+        }
+        return css.toString();
     }
 
     private static String colorOf(Theme theme, String role, String fallback) {

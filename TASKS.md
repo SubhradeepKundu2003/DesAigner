@@ -2,6 +2,10 @@
 
 > Living task file. Check items off as they land. Phases are ordered so each one
 > produces something runnable. Brainstorm notes / open questions are at the bottom.
+>
+> **Target-state backend architecture (multi-tenant, design-learning platform,
+> built on top of everything below without changing the orchestration) lives in
+> `ARCHITECTURE.md` — read that before starting Phase E onward.**
 
 ## Project Context
 
@@ -643,9 +647,581 @@ asset serve/upload endpoints (still nothing needs them yet — the editor does,
 once it exists). LLM-output lessons carry forward unchanged (lists → bare
 arrays, long prose → plain-text protocol, null-guard optional fields).
 
-**Next:** the full agent pipeline (#1–#9) is now built. What's left is Phase 4
-(Angular visual editor) and Phase 5 (hardening) — see below — plus the
-still-open unit-test/asset-endpoint gaps just noted.
+**Next (user decision, 2026-07-05, start of next session):** the full agent
+pipeline (#1–#9) is functionally built, but before backfilling Agents #1–#5's
+unit tests, the user wants to **improve visual design quality using the AI**,
+specifically by feeding it **reference newsletter/template images** — current
+output is functional but plain: one template (`td-classic`), section icons are
+literal colored dots (`IconMatcher` → `ShapeBox` circle, no real iconography),
+images from Agent #8 are placed at native aspect ratio with no caption/framing
+treatment, and composition/layout are 100% deterministic (the architecture's
+"LLM never produces geometry" rule — see "Design Model architecture" above —
+is a locked decision, not itself up for debate; a reference-image approach
+means using vision to extract *style* — colors, typography mood, iconography,
+layout mood — not coordinates).
+
+**Confirmed 2026-07-05 (checked live against the running Ollama instance, not
+assumed):** `qwen3.5:4b` as pulled on this machine **is vision-capable**.
+`curl http://localhost:11434/api/show -d '{"model":"qwen3.5:4b"}'` returns
+`"capabilities": ["completion", "vision", "tools", "thinking"]` and a real
+vision tower in `model_info` (`qwen35.vision.*` — attention heads, patch size,
+embedding length, etc., family `qwen35`, 4.7B params). So reference template
+images can be fed to the *same* local model already wired up — no new model
+pull needed. **Re-verify this on any other machine/Ollama version before
+relying on it** — capabilities are a property of the specific pulled model
+weights, not guaranteed by the tag name alone.
+
+**Architecture gap to close before this can be built:** `llm/LlmClient`
+(`generate(system, user)` / `generate(system, user, Class<T>)`) is **text-only
+today** — no way to attach an image to a prompt. Needed: a multimodal-capable
+method (e.g. `generate(system, user, List<byte[]> images)` or a small
+`Media`-carrying request object) implemented in `SpringAiLlmClient` via Spring
+AI's `Media`/multimodal `UserMessage` support. **Unverified — check before
+implementing:** whether Spring AI 2.0.0's Ollama chat integration actually
+plumbs image bytes through to Ollama's `images` field on a chat message (the
+abstraction exists for other providers; confirm it isn't a no-op for the
+Ollama backend specifically).
+
+Candidate directions raised (not yet chosen — **ask the user to prioritize
+before implementing**, this changes scope significantly):
+1. **Reference-image-driven style extraction (new, matches what the user asked
+   for)** — user supplies one or more reference newsletter/template images; a
+   vision LLM call describes/extracts palette, typography mood, iconography
+   style, and layout mood from them; that description informs (a human
+   authoring, or a one-time LLM-assisted generation of) the deterministic
+   `design-templates/*.json` theme — colors, named text styles, icon style —
+   so the *rendered* result still comes from 100% deterministic Java, just
+   informed by real reference material instead of hand-picked defaults.
+2. **Real icons + template polish** — replace dot placeholders with a real SVG
+   icon set matched per `NewsletterSection`/category; refine `td-classic`'s
+   colors/typography/spacing/dividers. Smallest architectural risk on its own
+   (touches `IconMatcher` + the template JSON + renderers' icon-drawing code,
+   no `LayoutEngine`/agent contract changes) — pairs naturally with #1 as the
+   delivery mechanism for whatever style #1 extracts.
+3. **More template variety** — 2-3 additional `resources/design-templates/*.json`
+   templates (different palettes/header styles) so every issue doesn't look
+   identical; `TemplateCatalog` already supports multiple templates, needs a
+   selection rule (currently hardcoded to the one template).
+4. **Better photo treatment** — captions, consistent crop-to-fill instead of
+   native aspect ratio, subtle border/shadow on images from Agent #8.
+5. **LLM-assisted design choices** — let the LLM suggest content-adjacent
+   decisions the current rule-based `DesignCompositionAgent` can't (e.g. which
+   article deserves a pull-quote, where to add emphasis) — still no geometry
+   from the LLM, that stays deterministic Java.
+
+None of the above is started. **Pick up next session by**: (a) getting the
+actual reference template image(s) from the user, (b) verifying the Spring
+AI + Ollama multimodal plumbing noted above with a throwaway probe before
+committing to the `LlmClient` interface change, (c) confirming with the user
+how #1 combines with #2–#5, then plan properly before touching code — this
+spans `agent/design/`, `agent/graphics/`, `llm/`, the template JSON, and
+possibly all three renderers (`render/html|pptx|pdf`). Once design quality is
+settled, return to: Phase 4 (Angular visual editor), Phase 5 (hardening), and
+the still-open unit-test/asset-endpoint gaps noted above.
+
+### Design Intelligence Platform vision v2 (refined 2026-07-05 — incorporates specialized repositories, feedback loop, versioning, constraints, pattern learning/selection split; refines `ARCHITECTURE.md`, **NOT YET APPROVED, user is verifying before any code or `ARCHITECTURE.md` changes**)
+
+**Scope, reaffirmed explicitly per user instruction:** this platform is
+**enterprise newsletter generation only**. Do not generalize any of the
+below toward presentations, brochures, flyers, or a generic document
+platform — every repository, service, and diagram in this section is
+newsletter-specific by design, even where the underlying mechanism (RAG,
+embeddings, versioning) would trivially generalize. If a future need for
+other document types arises, that is a separate decision, not an emergent
+side-effect of this architecture.
+
+`ARCHITECTURE.md` (written earlier the same session) already covers the
+platform-level backend evolution — multi-tenancy, Job Service, Asset/Prompt/
+Embedding/RAG services, a Design Knowledge Service, and a Template Analysis
+Service, all as additive modules around the untouched 9-agent orchestration.
+This section captures a **sharper, refined version of three specific
+parts** of that document that the user re-specified in more depth: (1) the
+platform is explicitly **two separate pipelines sharing a set of
+specialized knowledge repositories** (not one blended "analyze-then-generate"
+flow, and not one monolithic knowledge store either — v1 of this section's
+single "Design Knowledge Base" is now split per §1 below), (2) exactly how
+**Agent #7** evolves from deterministic composition into an AI-assisted
+Design Planner, and (3) a Design Feedback Loop + Continuous Learning
+mechanism so the platform improves from use without ever retraining the
+LLM. Everything else in `ARCHITECTURE.md` (schema, REST contracts, roadmap
+phasing, the "don't build for scale you don't have" principles) still
+applies unchanged unless noted otherwise below. **Hard constraints repeated
+because they're non-negotiable per the user:** don't redesign, merge, or
+remove any of Agents #1–#9; the LLM never outputs coordinates, ever;
+everything runs on local Ollama (target model updated to **Qwen 3.5 8B**,
+up from the current `qwen3.5:4b`, no cloud/paid API); minimize refactoring —
+extend existing modules, don't replace them.
+
+**Core philosophy restated:** this is not a template picker. The system
+should learn **why** a design family works (visual hierarchy, spacing
+rhythm, component vocabulary, brand identity) from real prior
+newsletters/brand assets, and *recombine those learned principles* into a
+genuinely new layout for new content — never literally reusing a stored
+template, and never copying pixels. The mechanism for "new but on-brand" is
+retrieval + recombination at the *component/pattern* level (§ Design
+Knowledge Base below), not generation of a whole new page from scratch —
+matches the already-locked "LLM never produces geometry" rule, since
+recombining pre-vetted, already-positioned component patterns is still
+deterministic Java doing the placing.
+
+#### Two pipelines, sharing a set of specialized knowledge repositories
+
+```
+Pipeline 1 — Design Learning Pipeline          Pipeline 2 — Newsletter Generation Pipeline
+(runs only when templates/brand assets         (runs on every content upload — this is
+ are uploaded; independent of, and much        today's existing Agents #1–#9, unchanged
+ rarer than, Pipeline 2)                        in count and order)
+
+ Newsletter PDFs/HTML, brand guides,            Business documents (xlsx/docx/pdf/pptx)
+ typography guides, CSS, logos, SVGs,                        │
+ icon sets, illustration libraries                            ▼
+            │                                    Agent #1 Ingestion → ... → Agent #6 Compliance
+            ▼                                                │
+  Template Analysis Service                                   ▼
+  (extraction: layout hierarchy, type                 Agent #7 Design Composition
+  scale, grid, spacing rhythm, palette,          (NOW an AI-assisted Design Planner —
+  component styles, hero/CTA/card                 see below — retrieves FROM the same
+  patterns, brand identity, reusable              Design Knowledge Base Pipeline 1 fills)
+  components, asset relationships)                             │
+            │                                                  ▼
+            ▼                                    Agent #8 Graphics → Agent #9 Review
+   ┌─────────────────────────────┐                             │
+   │ Specialized Knowledge        │◄───────────────────────────┘
+   │ Repositories (§ below —      │   (read-only from Pipeline 2's perspective;
+   │ design/, persistence/,       │    Pipeline 2 never writes knowledge, only reads it —
+   │ embedding/ — shared)         │    it DOES write performance signals back, see
+   └─────────────────────────────┘    the Design Feedback Loop § below)
+```
+
+The two pipelines are **decoupled in time and trigger**: Pipeline 1 runs
+rarely (someone uploads a new brand system or reference newsletters),
+Pipeline 2 runs on every newsletter generation request. They only meet at
+the Design Knowledge Base, which Pipeline 1 writes and Pipeline 2 reads.
+This is a refinement of `ARCHITECTURE.md`'s §11 (which already isolates the
+Template Analysis Service this way) — the addition here is making the
+**two-pipeline separation explicit** as an architectural boundary, not just
+an implementation detail of one service, because it clarifies staffing/
+testing/rollout: Pipeline 1 can be built, tested, and iterated on entirely
+independently of the live 9-agent generation path, with zero risk to it
+(exactly the "extend, don't touch" constraint).
+
+#### 1. Specialized repositories, not one monolithic knowledge store
+
+Each repository below is a **service-layer abstraction with one clear
+responsibility** (a Spring `@Service` + a narrow interface), not
+necessarily a new physical table — most map directly onto a single table
+already defined in `ARCHITECTURE.md` §5, which keeps this a genuine
+refinement rather than a schema rewrite. Only one net-new table is
+introduced (flagged below); everything else is "give this existing data an
+owner and a focused query contract," which is the actual problem with a
+single blended "Design Knowledge Base" service — not that the data was
+wrong, but that one service with a dozen unrelated query methods becomes
+its own monolith over time.
+
+| Repository | Responsibility | Backing storage |
+|---|---|---|
+| **Design Token Repository** | Color roles, type scale, spacing scale — the raw values a `Theme` is built from. Owns **token-level versioning** (a color palette can be revised independently of the rest of a template). | `templates.theme_json`'s token slice, versioned via the generic `version_history` table (§ Versioning below) at a sub-template granularity (`entity_type='design_tokens'`, `entity_id = templateId + ":tokens"`). |
+| **Layout Pattern Repository** | The `SectionPattern` enum plus **learned frequency/sequencing statistics** ("this brand alternates image-left/right 80% of the time"). This is genuinely new derived data with no existing home. | **One new, small table**: `layout_pattern_stats(id, project_id, source_template_id, pattern, frequency, sequencing_json)` — or a `usage_stats_json` column added to `templates` if that proves simpler at implementation time; left as an implementation-time choice. |
+| **Component Repository** | Named, reusable `(ComponentRole, Frame-shape pattern, TextStyle ref)` units — hero banners, KPI cards, alternating image blocks, CTA styles, footer styles. | `template_components` (`ARCHITECTURE.md` §5, exact fit, no change). |
+| **Typography Repository** | Hierarchy-aware view over type usage ("what's used for headlines vs. body vs. captions, and how consistently") — a distinct *query contract* from the Token Repository even though both read the same underlying `textStyles` data; typography's concern is hierarchy/consistency, tokens' concern is raw values. | Same `templates.theme_json` slice as Design Token Repository — deliberately shared storage, separate interface. |
+| **Brand Knowledge Repository** | Brand rules (existing Agent #6 rulebook: terminology/proper-name/banned-phrase, now data-backed) **plus** the new Design Constraints category (§5 below: max hero sections, footer/logo placement, allowed typography hierarchy, max accent colors, whitespace/spacing minimums). | `brand_rules` (`ARCHITECTURE.md` §5), constraints as additional `rule_type` values (`'layout-constraint'`) — reuses the existing polymorphic `rule_json` pattern, no new table. |
+| **Asset Repository** | Logos, icons, illustrations, SVGs — tagged by role/section/style, plus which components they were historically paired with. | `assets` (`ARCHITECTURE.md` §5, exact fit). |
+| **Prompt Repository** | Versioned prompt templates per agent (this is `ARCHITECTURE.md` §9's `PromptManagementService`, now explicitly named as one of the specialized repositories rather than a standalone concern). | `prompt_templates` (`ARCHITECTURE.md` §5/§9). |
+| **Newsletter Template Repository** | Published, compiled `Theme` + default component selections per brand — what `TemplateCatalog` actually loads. | `templates` (`ARCHITECTURE.md` §5, exact fit). |
+| **Newsletter Design Metadata Repository** | The record of what was actually generated: which issue, which components/patterns were chosen per section, what score it got, when. This is the repository the Design Feedback Loop and Continuous Learning (below) read and write. | `newsletter_issues` + `generation_history` + `quality_scores` (`ARCHITECTURE.md` §5) — `generation_history` gains a `chosen_component_id`/`chosen_pattern` pair per section (small, additive column set) so a score can be traced back to the exact knowledge-repository entries it used. |
+
+This is the concrete answer to "avoid one large monolithic knowledge
+store": nine focused interfaces, mostly thin wrappers with a clear name and
+a handful of methods each, sharing the same underlying Postgres tables from
+`ARCHITECTURE.md` §5 wherever the data already fits — new tables are the
+exception, not the default.
+
+#### 2. Design Feedback Loop — learning from quality scores without retraining the LLM
+
+Matches the user's exact workflow:
+
+```
+Generate Newsletter → Review (Agent #9, existing) → Quality Score (existing)
+        │
+        ▼
+Store Design Performance  — generation_history now records, per section,
+                             WHICH template_components / layout pattern /
+                             asset were chosen (the Design Plan's IDs from
+                             Agent #7 below); quality_scores already exists
+                             per component_id (Agent #9's ReviewFinding
+                             already carries this) — join the two and you
+                             have "this component, in this context, scored X"
+        │
+        ▼
+Rank Components / Rank Layouts  — Component Repository and Layout Pattern
+                             Repository each expose a ranking method that
+                             folds in an aggregate performance signal
+                             (e.g. a rolling average quality score per
+                             component/pattern id) alongside raw embedding
+                             similarity — NOT a separate ML model, just a
+                             weighted-average read query
+        │
+        ▼
+Improve Future Retrieval  — Pattern Selection (§6 below), when ranking
+                             candidates for a new issue, now prefers
+                             historically-higher-scoring components/patterns
+                             over purely-similar-but-unproven ones — the
+                             same "re-rank retrieval by past quality_scores"
+                             mechanism `ARCHITECTURE.md` §8 already specifies
+                             for Agent #4's prose exemplars, applied here to
+                             design choices instead of text
+```
+
+**Why this needs no LLM retraining:** the loop only ever changes which
+*pre-vetted, already-learned* components/patterns get *ranked higher* in
+retrieval — it never changes model weights, never fine-tunes, and never
+asks the LLM to "learn" anything. This is consistent with the local-only
+Ollama constraint (no training infrastructure needed, ever) and with the
+"LLM proposes, Java decides" split used everywhere else in this codebase.
+
+#### 3. Versioning
+
+All of the following get version history via the **one generic
+`version_history` table** already specified in `ARCHITECTURE.md` §5 (no new
+per-entity history tables): Newsletter Templates, Components, Layout
+Patterns, Typography, Brand Assets, Color Palettes, Design Tokens. Each is
+just a distinct `entity_type` value with its own `entity_id` scheme (a
+component's id, a token-set's synthetic id, etc.) — the mechanism doesn't
+change per entity type, only which repository calls it on publish/edit.
+
+**Reproducibility clarification (important, and already mostly solved):**
+an *already-generated* newsletter issue's reproducibility does **not**
+depend on this versioning at all — Phase C's existing `design_documents`
+table already stores the **fully-resolved** `DesignDocument` (every color,
+font, and position baked in as literal values, not references) at the
+revision it was generated/edited at. Re-exporting an old issue after a
+brand's colors change later is already guaranteed correct today, for free.
+`version_history` on templates/components/tokens instead answers a
+*different* question — "what did our brand's knowledge base look like over
+time, and can we roll a bad edit back" — an audit/rollback need for the
+**knowledge base itself**, not a per-issue reproducibility mechanism.
+
+#### 4. Expanded Design Learning Pipeline sources
+
+Adds two sources to the list already in `ARCHITECTURE.md` §11: **existing
+generated newsletters** (the platform's own high-quality past outputs,
+identified via the Newsletter Design Metadata Repository's quality scores,
+become a learning source too — closing the loop between generation and
+learning, not just review-and-rank) and **component snippets** (a designer
+uploads one HTML/CSS or image snippet representing a single reusable
+component, not a whole newsletter — the smallest-grained possible learning
+input, extracted the same HTML/CSS path as a full page, just scoped to one
+component). Every source — PDFs, HTML, CSS, brand guidelines, logos, icons,
+SVGs, illustration libraries, past generated issues, component snippets —
+still normalizes into the **same** `Theme`/`ComponentRole`/
+`template_components` representation described in `ARCHITECTURE.md` §11;
+this expansion adds inputs, not a new target schema.
+
+#### 5. Design Constraints
+
+A new knowledge category, distinct from patterns/components: **rules that
+bound what a valid design is allowed to do**, not what it typically looks
+like. Examples the user specified: max hero sections, max KPI cards, max
+featured stories, footer/logo placement rules, allowed typography hierarchy
+depth, max accent colors, minimum whitespace, allowed spacing values.
+Stored in the **Brand Knowledge Repository** as `brand_rules` rows with
+`rule_type='layout-constraint'` (reuses the existing polymorphic
+`rule_json` shape — no new table).
+
+**Enforcement is deterministic Java, not the LLM's job to obey by
+politeness** — a new `DesignConstraintValidator` (plain Java, no model
+call) runs inside Agent #7, **after** the Layout Planning LLM call produces
+its choices and **before** they reach `LayoutEngine`: it checks the chosen
+component/pattern list against the retrieved constraints (count limits,
+placement rules, palette-size limits) and clamps violations back to the
+existing deterministic fallback for just the offending section (e.g. LLM
+picked 3 hero sections, max is 1 → keep the first, demote the rest to
+`STANDARD`). This is the same spirit as Agent #9's `LayoutLint`, applied
+proactively at composition time instead of retrospectively at review time
+— and it's what makes it safe to let an LLM make design choices at all: the
+LLM proposes, the constraint validator (like every other deterministic gate
+in this codebase) has the final word.
+
+#### 6. Pattern Learning vs. Pattern Selection — kept as separate responsibilities
+
+- **Pattern Learning** (discover reusable layouts, section hierarchy,
+  spacing, visual rhythm, typography) happens **only in Pipeline 1**, owned
+  by the Template Analysis Service (`ARCHITECTURE.md` §11) writing into the
+  Layout Pattern / Component / Typography Repositories above. It never runs
+  as part of newsletter generation.
+- **Pattern Selection** (retrieve suitable patterns, rank candidates, match
+  against this issue's actual content, pick the best fit) happens **only in
+  Pipeline 2**, as a new internal collaborator inside `DesignCompositionAgent`
+  — a `PatternSelectionService` (agent-#7-local, not a new agent, not a new
+  `@Order` stage) that reads from the repositories above (read-only,
+  exactly like `RagRetrievalService` elsewhere) and produces the ranked
+  candidate list the Layout Planning LLM call chooses among.
+
+Keeping these as two named responsibilities (even though both currently
+live in code near each other) matters because they have opposite
+cardinality and risk profiles: Pattern Learning runs rarely, is allowed to
+be slow and human-reviewed (draft/publish gate, `ARCHITECTURE.md` §11);
+Pattern Selection runs on every single newsletter and must be fast,
+read-only, and always have a safe fallback. Conflating them into one
+"design knowledge" concern is exactly the monolith §1 above is designed to
+avoid.
+
+#### Agent #7 evolution — the centerpiece change
+
+**Today:** `DesignCompositionAgent` (`@Order(7)`) picks a `SectionPattern`
+per section by hardcoded rules (no LLM call), `LayoutEngine` turns that into
+positioned `Frame`s deterministically.
+
+**Target flow** (matches the user's exact diagram):
+
+```
+GeneratedNewsletter (post-#6 compliance-corrected content)
+        │
+        ▼
+Design Knowledge Retrieval   — Design Token + Typography Repositories: given
+                                this project's templateId, fetch the
+                                relevant learned tokens/typography/palette
+        │
+        ▼
+Pattern Selection (NOT Pattern Learning — §6 above; ranking, not discovery)
+                                — Component Repository + Layout Pattern
+                                Repository: given each section's
+                                NewsletterSection + content shape (has a key
+                                metric? two articles? an image available?),
+                                fetch candidate template_components/patterns
+                                ranked by embedding similarity **and** the
+                                Design Feedback Loop's accumulated quality
+                                scores (§2 above)
+        │
+        ▼
+Asset Retrieval               — Asset Repository: candidate icons/
+                                illustrations/images for this section, brand-
+                                approved, tagged for the retrieved component's style
+        │
+        ▼
+Constraint Retrieval          — Brand Knowledge Repository: layout
+                                constraints for this brand (§5 above — max
+                                hero sections, footer/logo placement, etc.)
+        │
+        ▼
+Previous High-Quality Newsletter Retrieval — Newsletter Design Metadata
+                                Repository: top-scoring past issues for this
+                                section type, as LLM few-shot grounding
+                                (mirrors `ARCHITECTURE.md` §8's Agent #4
+                                exemplar retrieval, reused here for design
+                                choices instead of prose)
+        │
+        ▼
+Layout Planning (LLM call — NEW, the one new model call this agent gains)
+                                — given the ranked candidates, assets, and
+                                exemplars, the LLM picks WHICH candidate
+                                pattern/component fits each section and in
+                                what ORDER sections/variations appear (e.g.
+                                "alternate image-left/right", "use the
+                                KPI-card component for Delivery Highlights
+                                since it has a numeric metric, matching this
+                                brand's established pattern") — a small,
+                                constrained choice among pre-vetted, already-
+                                positioned candidates, structured output
+                                (bare JSON array, per this codebase's
+                                extractJson lesson), e.g.
+                                `[{sectionTitle, chosenComponentId, assetId?}]`
+        │
+        ▼
+Design Constraint Validation (deterministic, NEW, no LLM) — the
+                                `DesignConstraintValidator` (§5 above) checks
+                                the LLM's choices against the retrieved
+                                constraints; violations clamp back to the
+                                existing deterministic fallback rule for just
+                                that one section — the LLM proposes, this has
+                                the final word, same as every gate elsewhere
+                                in this codebase
+        │
+        ▼
+Design Plan (validated)       — a new, small DTO (NOT a new Component/Frame
+                                type) carrying the validated choices: which
+                                component per section, which asset per slot —
+                                still zero coordinates, zero styling values,
+                                just IDs referencing already-deterministic,
+                                pre-vetted repository entries
+        │
+        ▼
+Deterministic Layout Engine    — LayoutEngine, UNCHANGED in kind: instead of
+                                (or in addition to) its current hardcoded
+                                per-`SectionPattern` methods
+                                (layoutHero/layoutStatCallout/...), it gains
+                                one more method that positions a
+                                `template_components`-sourced `Frame` pattern
+                                the same way it positions today's hardcoded
+                                ones — same Paginator/TextMeasurer/
+                                OverflowResolver machinery, same "no LLM
+                                geometry" invariant, just one more source of
+                                patterns to lay out
+        │
+        ▼
+Design JSON (DesignDocument) → HTML / PPTX / PDF renderers (unchanged)
+```
+
+**Why this preserves everything the user asked to preserve:**
+- The **LLM's output is a small ID-choice array, never a coordinate** — the
+  exact same "LLM proposes, Java decides" split every other agent in this
+  codebase already uses (planning's scoring call, compliance's rewrite
+  call). `LayoutLint`/`OverflowResolver`/`Paginator` don't change at all.
+- **Two independent safety nets, not one**: the `DesignConstraintValidator`
+  catches rule violations (counts, placement) and today's hardcoded
+  `SectionPattern` selection is still the fallback if the LLM call fails
+  outright or returns something unusable — one degraded section, never a
+  failed run, identical spirit to every other agent's per-item fallback.
+- **No new agent, no reordering** — this is entirely inside
+  `DesignCompositionAgent`'s existing `@Order(7)` slot. `compose()` gains
+  the new retrieval + validation steps before its existing pattern-selection
+  `switch`; that switch becomes the fallback path, not deleted code.
+- **New model call only fires when the repositories actually have data for
+  this project** — a project with no learned templates yet (or before
+  Pipeline 1 has ever run) falls straight through to today's behavior with
+  zero new latency or risk, matching `ARCHITECTURE.md`'s "every new
+  capability degrades gracefully to today's exact behavior" principle
+  applied everywhere else.
+
+#### Continuous Learning (broader than the Feedback Loop — includes human signals, still no LLM retraining)
+
+The Design Feedback Loop (§2) covers Agent #9's automated quality score.
+Continuous Learning widens the same ranking mechanism to additional
+signals, all landing in the Newsletter Design Metadata Repository and all
+read by the same Pattern Selection ranking query — **no new learning
+mechanism, just more signal types feeding the one that already exists**:
+
+- **Newly uploaded newsletter templates / newly approved newsletters** —
+  Pipeline 1 runs again, repositories gain new/updated entries; nothing
+  special beyond normal Pipeline 1 operation.
+- **Review scores** — already covered (§2).
+- **User edits / manual layout adjustments** — from the future editor
+  (`ARCHITECTURE.md` §15 Phase J): when a human moves/replaces a
+  Design-Plan-chosen component after generation, that's a strong negative
+  signal for that component-in-that-context — recorded the same way a low
+  quality score is, via the Newsletter Design Metadata Repository.
+- **Accepted / rejected AI suggestions** — same idea, one level higher:
+  Agent #7's `DesignPlanChoice` itself, once a future editor can show it to
+  a human before finalizing, gets an explicit accept/reject signal rather
+  than an inferred one from later edits — the stronger of the two signals
+  when both exist.
+
+All of these are **ranking-query inputs, never model weights** — this is
+what "improve through use without retraining the LLM" means concretely in
+this architecture: the LLM's job (propose a small set of choices) never
+changes; what changes is which choices Pattern Selection puts in front of
+it, and that's a SQL-level ranking query update, not a training run.
+
+#### Class-level shape (new types only — everything else in `design/`/`agent/design/` is unchanged)
+
+```mermaid
+classDiagram
+    class DesignCompositionAgent {
+      +execute(PipelineContext)
+      -compose(GeneratedSection) SectionComposition
+      -planWithKnowledge(GeneratedSection, DesignKnowledgeContext) DesignPlanChoice
+    }
+    class DesignKnowledgeContext {
+      +List~RetrievedComponent~ candidateComponents
+      +List~RetrievedAsset~ candidateAssets
+      +List~LayoutConstraint~ constraints
+      +List~ExemplarIssue~ highQualityExemplars
+      +DesignTokens tokens
+    }
+    class DesignPlanChoice {
+      +String sectionTitle
+      +String chosenComponentId
+      +String chosenAssetId
+    }
+    class RetrievedComponent {
+      +String id
+      +ComponentRole role
+      +String patternJson
+      +double similarityScore
+      +double rankedQualityScore
+    }
+    class PatternSelectionService {
+      +selectCandidates(NewsletterSection, contentShape, projectId) List~RetrievedComponent~
+      -rankByQualityScore(candidates) List~RetrievedComponent~ : reads Design Feedback Loop signal (§2)
+    }
+    class DesignConstraintValidator {
+      +validate(List~DesignPlanChoice~, List~LayoutConstraint~) List~DesignPlanChoice~
+    }
+    class ComponentRepository { +findCandidates(role, projectId) List~RetrievedComponent~ }
+    class LayoutPatternRepository { +findCandidates(section, projectId) List~RetrievedComponent~ }
+    class BrandKnowledgeRepository { +findConstraints(projectId) List~LayoutConstraint~ }
+    class AssetRepository { +findApproved(section, projectId) List~RetrievedAsset~ }
+    class NewsletterDesignMetadataRepository { +findHighQualityExemplars(section, projectId, k) List~ExemplarIssue~ }
+    class LayoutEngine {
+      +layout(CompositionPlan, DesignTemplate, issueTitle, jobId) DesignDocument
+      -layoutFromComponentPattern(SectionComposition, RetrievedComponent) : positions via Paginator (NEW method, same machinery)
+    }
+    DesignCompositionAgent --> DesignKnowledgeContext : builds via retrieval
+    DesignCompositionAgent --> PatternSelectionService
+    DesignCompositionAgent --> DesignConstraintValidator : validates LLM's DesignPlanChoice list
+    DesignCompositionAgent --> DesignPlanChoice : LLM call produces (pre-validation)
+    DesignCompositionAgent --> LayoutEngine : passes validated component pattern
+    PatternSelectionService --> ComponentRepository
+    PatternSelectionService --> LayoutPatternRepository
+    DesignCompositionAgent --> AssetRepository
+    DesignCompositionAgent --> BrandKnowledgeRepository
+    DesignCompositionAgent --> NewsletterDesignMetadataRepository
+```
+
+`DesignPlanChoice`/`DesignKnowledgeContext` are new, small, agent-#7-local
+DTOs (mirroring how `SectionComposition`/`CompositionPlan` already work) —
+**not** new entries in the sealed `Component`/`Theme` model, so nothing
+downstream of `LayoutEngine` (renderers, persistence, the future editor)
+needs to know this retrieval step exists at all. The repository interfaces
+shown (`ComponentRepository`, `LayoutPatternRepository`,
+`BrandKnowledgeRepository`, `AssetRepository`,
+`NewsletterDesignMetadataRepository`) are five of the nine from §1 above —
+the ones Agent #7 actually reads from; Design Token/Typography/Prompt/
+Template Repositories are read earlier (template/theme resolution) or by
+other agents entirely.
+
+#### How "generate a genuinely new design" actually works end to end
+
+Given a brand whose learned components include a hero banner pattern, a KPI
+card pattern, an alternating-image pattern, and rounded-card styling: a new
+issue with different content never reuses a stored *page*, because no page
+is ever stored — only the *components* and the *statistics about how they're
+combined* are. Each generation run (a) picks components per section based on
+that content's own shape (has a metric → KPI card; has an image →
+alternating pattern; is the leadership message → hero), informed by (b) the
+learned sequencing/frequency statistics (alternate image sides, roughly
+match historical section-pattern proportions) — so the output is a fresh
+composition of pre-vetted, on-brand pieces arranged for *this* content,
+never a copy of any single prior issue. This is the same principle a human
+senior designer applies with a component library and a style guide, not
+template cloning.
+
+#### Model note
+
+Target chat model updates to **`qwen3.5:8b`** (up from `qwen3.5:4b`) for
+this platform's LLM calls generally, per the user's stated environment —
+**re-verify vision-capability and structured-output behavior on the 8B
+weights before relying on either** (the 4B vision-capability finding from
+this session was explicitly flagged as "a property of the specific pulled
+model weights, not guaranteed by the tag name alone"). `nomic-embed-text`
+stays the embedding model (unchanged, already verified working).
+
+#### What's explicitly deferred / not re-litigated here
+
+Everything in `ARCHITECTURE.md` not called out above stays as written:
+Postgres+pgvector-only storage, no message broker, no Vector Search/Workflow
+Service as separate modules, the full schema (§5), REST API contracts
+(§16), and the phased roadmap (§15 — Phase E platform foundation through
+Phase J editor APIs). The roadmap's Phase I ("Template Learning Pipeline")
+is where this section's two-pipeline framing and Agent #7 flow actually get
+built — this section refines *what* Phase I builds, not *when* (still last,
+still gated on Phases E–H's infrastructure, per that document's stated
+reasoning).
+
+**Status: proposed only (v2 — specialized repositories, feedback loop,
+versioning, constraints, pattern learning/selection split, scope
+reaffirmed as newsletters-only). Per explicit instruction, no code and no
+`ARCHITECTURE.md` edits until the user verifies this section.**
 
 ---
 

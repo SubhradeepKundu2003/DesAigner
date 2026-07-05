@@ -14,8 +14,10 @@ import com.tcs.contentGenerator.agent.design.SectionPattern;
 import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.agent.planning.NewsletterSection;
 import com.tcs.contentGenerator.design.Component;
+import com.tcs.contentGenerator.design.ComponentRole;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.Frame;
+import com.tcs.contentGenerator.design.ImageBox;
 import com.tcs.contentGenerator.design.Page;
 import com.tcs.contentGenerator.design.PageSize;
 import com.tcs.contentGenerator.design.Spacing;
@@ -149,6 +151,26 @@ class LayoutEngineTest {
                 assertTrue(found, "expected to find headline \"" + article.headline() + "\" somewhere in the design");
             }
         }
+    }
+
+    @Test
+    void mastheadPlacesLogoBesideIssueTitleWithoutOverlap() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
+        List<Component> firstPage = document.pages().get(0).components();
+
+        ImageBox logo = firstPage.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.LOGO)
+                .findFirst().orElseThrow(() -> new AssertionError("expected a LOGO ImageBox on the first page"));
+        TextBox title = firstPage.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.ISSUE_TITLE)
+                .findFirst().orElseThrow(() -> new AssertionError("expected an ISSUE_TITLE TextBox on the first page"));
+
+        assertTrue(!overlaps(logo.frame(), title.frame()), "logo and issue title must not overlap");
+        assertTrue(Math.abs(logo.frame().y() - MARGIN) < EPSILON, "logo should start at the top margin");
+        assertTrue(Math.abs(title.frame().y() - MARGIN) < EPSILON, "issue title should start at the top margin");
+        assertTrue(logo.frame().x() < title.frame().x(), "logo should sit to the left of the issue title");
     }
 
     private static boolean overlaps(Frame a, Frame b) {

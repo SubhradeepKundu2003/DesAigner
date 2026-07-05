@@ -10,6 +10,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -110,6 +111,32 @@ class PptxDesignRendererTest {
 
             XSLFPictureShape pictureShape = assertInstanceOf(XSLFPictureShape.class, shapes.get(4));
             assertArrayEquals(png, pictureShape.getPictureData().getData());
+        }
+    }
+
+    @Test
+    void rasterizesSvgAssetsToAnEmbeddedPngPicture() throws Exception {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\">"
+                + "<rect width=\"40\" height=\"40\" fill=\"#000000\"/></svg>";
+        Asset asset = new Asset("brand-logo", "image", "assets/BRAND/logo_black.svg", null, null);
+        ImageBox logo = new ImageBox("cmp-1", ComponentRole.LOGO,
+                new Frame(48, 48, 40, 40), 0, true, null, "brand-logo", "Company logo");
+        Page page = new Page("page-1", List.of(logo));
+        DesignDocument document = new DesignDocument(1, 1,
+                new DesignMeta("Issue", "job-1"), THEME, List.of(asset), List.of(page));
+
+        PptxDesignRenderer renderer = new PptxDesignRenderer(
+                new FakeStorageService(Map.of("assets/BRAND/logo_black.svg", svg.getBytes(StandardCharsets.UTF_8))));
+        byte[] pptxBytes = renderer.render(document);
+
+        try (XMLSlideShow ppt = new XMLSlideShow(new ByteArrayInputStream(pptxBytes))) {
+            List<XSLFShape> shapes = ppt.getSlides().get(0).getShapes();
+            assertEquals(1, shapes.size());
+            XSLFPictureShape pictureShape = assertInstanceOf(XSLFPictureShape.class, shapes.get(0));
+            // Rasterized, not the raw SVG bytes — confirms the transcoding path actually ran.
+            BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(pictureShape.getPictureData().getData()));
+            assertEquals(160, decoded.getWidth());
+            assertEquals(160, decoded.getHeight());
         }
     }
 

@@ -1,16 +1,20 @@
 package com.tcs.contentGenerator.render.pdf;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 
 import org.springframework.stereotype.Component;
 
+import com.openhtmltopdf.outputdevice.helper.BaseRendererBuilder.FontStyle;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+import com.openhtmltopdf.svgsupport.BatikSVGDrawer;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.PageSize;
 import com.tcs.contentGenerator.render.DesignRenderer;
 import com.tcs.contentGenerator.render.ExportFormat;
+import com.tcs.contentGenerator.render.font.BrandFontRegistry;
 import com.tcs.contentGenerator.render.html.HtmlDesignRenderer;
 
 /**
@@ -26,9 +30,11 @@ import com.tcs.contentGenerator.render.html.HtmlDesignRenderer;
 public class PdfDesignRenderer implements DesignRenderer {
 
     private final HtmlDesignRenderer htmlRenderer;
+    private final BrandFontRegistry fontRegistry;
 
-    public PdfDesignRenderer(HtmlDesignRenderer htmlRenderer) {
+    public PdfDesignRenderer(HtmlDesignRenderer htmlRenderer, BrandFontRegistry fontRegistry) {
         this.htmlRenderer = htmlRenderer;
+        this.fontRegistry = fontRegistry;
     }
 
     @Override
@@ -44,8 +50,14 @@ public class PdfDesignRenderer implements DesignRenderer {
                 + ".page{margin:0;box-shadow:none;page-break-before:always;}"
                 + ".page:first-child{page-break-before:auto;}";
         String xhtml = htmlRenderer.renderHtml(document, printCss);
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+                BatikSVGDrawer svgDrawer = new BatikSVGDrawer()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
+            builder.useSVGDrawer(svgDrawer);
+            fontRegistry.bytesFor("normal").ifPresent(bytes -> builder.useFont(
+                    () -> new ByteArrayInputStream(bytes), fontRegistry.family(), 400, FontStyle.NORMAL, true));
+            fontRegistry.bytesFor("bold").ifPresent(bytes -> builder.useFont(
+                    () -> new ByteArrayInputStream(bytes), fontRegistry.family(), 700, FontStyle.NORMAL, true));
             builder.withHtmlContent(xhtml, null);
             builder.toStream(out);
             builder.run();

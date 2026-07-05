@@ -11,19 +11,21 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Loads design templates from {@code resources/design-templates/*.json} —
- * editable without recompiling, later user-uploadable. Starts with one
- * template, {@code td-classic}.
+ * editable without recompiling, later user-uploadable. {@code tcs-brand} is
+ * the active default; {@code td-classic} is kept loadable via {@link #get}
+ * for comparison/rollback.
  */
 @Component
 public class TemplateCatalog {
 
-    private static final String DEFAULT_NAME = "td-classic";
+    private static final String DEFAULT_NAME = "tcs-brand";
 
     private final Map<String, DesignTemplate> templates;
 
     public TemplateCatalog(ObjectMapper objectMapper) {
         DesignTemplate classic = load(objectMapper, "design-templates/td-classic.json");
-        this.templates = Map.of(classic.name(), classic);
+        DesignTemplate tcsBrand = load(objectMapper, "design-templates/tcs-brand.json");
+        this.templates = Map.of(classic.name(), classic, tcsBrand.name(), tcsBrand);
     }
 
     private static DesignTemplate load(ObjectMapper objectMapper, String classpathLocation) {

@@ -6,6 +6,7 @@ import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +15,7 @@ import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.generation.GeneratedSection;
 import com.tcs.contentGenerator.agent.planning.NewsletterSection;
+import com.tcs.contentGenerator.design.Asset;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.orchestrator.Agent;
 import com.tcs.contentGenerator.orchestrator.PipelineContext;
@@ -36,12 +38,20 @@ public class DesignCompositionAgent implements Agent {
     /** Same figure shape used by fact validation and brand compliance. */
     private static final Pattern NUMBER = Pattern.compile("\\d[\\d,]*(?:\\.\\d+)?");
 
+    private static final String BRAND_LOGO_FOLDER = "BRAND";
+    /** Black variant: every current template has a white page background, and the brand
+     *  guide itself prefers black for contrast. Revisit if a dark-background template ships. */
+    private static final String BRAND_LOGO_FILENAME = "logo_black.svg";
+
     private final TemplateCatalog templates;
     private final LayoutEngine layoutEngine;
+    private final String brandAssetsRoot;
 
-    public DesignCompositionAgent(TemplateCatalog templates, LayoutEngine layoutEngine) {
+    public DesignCompositionAgent(TemplateCatalog templates, LayoutEngine layoutEngine,
+            @Value("${app.graphics.brand-assets-root:assets}") String brandAssetsRoot) {
         this.templates = templates;
         this.layoutEngine = layoutEngine;
+        this.brandAssetsRoot = brandAssetsRoot;
     }
 
     @Override
@@ -64,6 +74,10 @@ public class DesignCompositionAgent implements Agent {
                 .toList();
         CompositionPlan plan = new CompositionPlan(template.name(), sections);
         DesignDocument document = layoutEngine.layout(plan, template, newsletter.issueTitle(), context.getJobId());
+        Asset logo = new Asset(LayoutEngine.BRAND_LOGO_ASSET_ID, "image",
+                brandAssetsRoot + "/" + BRAND_LOGO_FOLDER + "/" + BRAND_LOGO_FILENAME, null, null);
+        document = new DesignDocument(document.schemaVersion(), document.revision(), document.meta(),
+                document.theme(), List.of(logo), document.pages());
         context.setDesignDocument(document);
         log.info("Design composition produced {} page(s) from {} section(s) using template '{}'",
                 document.pages().size(), sections.size(), template.name());

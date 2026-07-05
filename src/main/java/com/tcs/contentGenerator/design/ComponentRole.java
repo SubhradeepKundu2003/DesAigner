@@ -14,5 +14,6 @@ public enum ComponentRole {
     ARTICLE_BODY,
     STAT_VALUE,
     STAT_LABEL,
-    IMAGE_PLACEHOLDER
+    IMAGE_PLACEHOLDER,
+    LOGO
 }

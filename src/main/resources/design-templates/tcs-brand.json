@@ -1,0 +1,27 @@
+{
+  "name": "tcs-brand",
+  "theme": {
+    "pageSize": { "widthPt": 595.28, "heightPt": 841.89 },
+    "spacing": { "marginPt": 48, "gutterPt": 16 },
+    "colors": {
+      "background": "#FFFFFF",
+      "surface": "#EBEBEB",
+      "text": "#000000",
+      "muted": "#404040",
+      "primary": "#4E84C4",
+      "secondary": "#FBB034",
+      "accent": "#54B948",
+      "divider": "#D9D9D9"
+    },
+    "textStyles": {
+      "IssueTitle": { "fontFamily": "Houschka Rounded", "fontSizePt": 28, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 34 },
+      "SectionTitle": { "fontFamily": "Houschka Rounded", "fontSizePt": 16, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 20 },
+      "HeroHeadline": { "fontFamily": "Houschka Rounded", "fontSizePt": 20, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 25 },
+      "Headline": { "fontFamily": "Houschka Rounded", "fontSizePt": 13, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 17 },
+      "Body": { "fontFamily": "Houschka Rounded", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 },
+      "Stat": { "fontFamily": "Houschka Rounded", "fontSizePt": 32, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 36 },
+      "StatLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
+      "EventItem": { "fontFamily": "Houschka Rounded", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
+    }
+  }
+}

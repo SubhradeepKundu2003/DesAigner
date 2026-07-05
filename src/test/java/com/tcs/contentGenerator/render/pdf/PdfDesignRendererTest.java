@@ -1,18 +1,24 @@
 package com.tcs.contentGenerator.render.pdf;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 
+import com.tcs.contentGenerator.design.Asset;
 import com.tcs.contentGenerator.design.ComponentRole;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.DesignMeta;
@@ -27,6 +33,7 @@ import com.tcs.contentGenerator.design.TextBox;
 import com.tcs.contentGenerator.design.TextStyle;
 import com.tcs.contentGenerator.design.Theme;
 import com.tcs.contentGenerator.render.ExportFormat;
+import com.tcs.contentGenerator.render.font.BrandFontRegistry;
 import com.tcs.contentGenerator.render.html.HtmlDesignRenderer;
 import com.tcs.contentGenerator.storage.StorageService;
 
@@ -46,7 +53,8 @@ class PdfDesignRendererTest {
                     "Body", new TextStyle("SansSerif", 10, "normal", "text", 14)),
             new Spacing(48, 16));
 
-    private final PdfDesignRenderer renderer = new PdfDesignRenderer(new HtmlDesignRenderer(new NoopStorageService()));
+    private final PdfDesignRenderer renderer = new PdfDesignRenderer(
+            new HtmlDesignRenderer(new NoopStorageService(), new BrandFontRegistry()), new BrandFontRegistry());
 
     @Test
     void reportsPdfFormat() {
@@ -116,6 +124,45 @@ class PdfDesignRendererTest {
         }
     }
 
+    @Test
+    void embedsSvgAssetsViaTheBatikSvgDrawer() throws Exception {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\">"
+                + "<rect width=\"40\" height=\"40\" fill=\"#000000\"/></svg>";
+        Asset asset = new Asset("brand-logo", "image", "assets/BRAND/logo_black.svg", null, null);
+        ImageBox logo = new ImageBox("cmp-1", ComponentRole.LOGO,
+                new Frame(48, 48, 40, 40), 0, true, null, "brand-logo", "Company logo");
+        DesignDocument document = new DesignDocument(1, 1, new DesignMeta("Issue", "job-1"), THEME,
+                List.of(asset), List.of(new Page("page-1", List.of(logo))));
+        PdfDesignRenderer svgRenderer = new PdfDesignRenderer(
+                new HtmlDesignRenderer(
+                        new FixedStorageService(Map.of("assets/BRAND/logo_black.svg",
+                                svg.getBytes(StandardCharsets.UTF_8))),
+                        new BrandFontRegistry()),
+                new BrandFontRegistry());
+
+        byte[] pdfBytes = svgRenderer.render(document);
+
+        try (PDDocument pdf = Loader.loadPDF(pdfBytes)) {
+            assertEquals(1, pdf.getNumberOfPages());
+            // Not just "didn't throw" — confirm the SVG was actually rasterized and
+            // embedded as a real image, not silently dropped or left as text.
+            assertFalse(new PDFTextStripper().getText(pdf).contains("Company logo"),
+                    "a real embedded image means the placeholder label must not appear");
+            // Batik draws the SVG as vector content into a PDFormXObject rather than a
+            // raster image — either way, its presence means the SVG was actually
+            // rendered, not silently skipped (the no-asset placeholder path draws no
+            // XObject at all, just text — already ruled out above).
+            PDResources resources = pdf.getPage(0).getResources();
+            boolean hasFormXObject = false;
+            for (COSName name : resources.getXObjectNames()) {
+                if (resources.getXObject(name) instanceof PDFormXObject) {
+                    hasFormXObject = true;
+                }
+            }
+            assertTrue(hasFormXObject, "expected the SVG logo to be drawn via a form XObject");
+        }
+    }
+
     /** No fixture here uses a real image asset, so every method is unreachable. */
     private static final class NoopStorageService implements StorageService {
         @Override
@@ -126,6 +173,37 @@ class PdfDesignRendererTest {
         @Override
         public byte[] retrieve(String ref) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Path resolve(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void delete(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<String> list(String relativeDir) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private record FixedStorageService(Map<String, byte[]> content) implements StorageService {
+        @Override
+        public String store(String relativePath, byte[] bytes) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public byte[] retrieve(String ref) {
+            byte[] bytes = content.get(ref);
+            if (bytes == null) {
+                throw new IllegalStateException("No content for ref " + ref);
+            }
+            return bytes;
         }
 
         @Override

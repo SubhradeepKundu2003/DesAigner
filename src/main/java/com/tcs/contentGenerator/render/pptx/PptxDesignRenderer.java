@@ -3,6 +3,7 @@ package com.tcs.contentGenerator.render.pptx;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.geom.Rectangle2D;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -10,6 +11,10 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.apache.batik.transcoder.TranscoderException;
+import org.apache.batik.transcoder.TranscoderInput;
+import org.apache.batik.transcoder.TranscoderOutput;
+import org.apache.batik.transcoder.image.PNGTranscoder;
 import org.apache.poi.sl.usermodel.Insets2D;
 import org.apache.poi.sl.usermodel.PictureData.PictureType;
 import org.apache.poi.sl.usermodel.ShapeType;
@@ -137,7 +142,15 @@ public class PptxDesignRenderer implements DesignRenderer {
         if (asset != null) {
             try {
                 byte[] bytes = storageService.retrieve(asset.storedRef());
-                var pictureData = ppt.addPicture(bytes, pictureTypeOf(asset));
+                PictureType type = pictureTypeOf(asset);
+                if (isSvg(asset.storedRef())) {
+                    // POI/XSLF has no native SVG embedding; rasterize once via the
+                    // same Batik brought in for the PDF renderer's SVG support and
+                    // embed the result as a normal PNG picture.
+                    bytes = rasterizeSvgToPng(bytes, (float) box.frame().w(), (float) box.frame().h());
+                    type = PictureType.PNG;
+                }
+                var pictureData = ppt.addPicture(bytes, type);
                 XSLFPictureShape picture = slide.createPicture(pictureData);
                 picture.setAnchor(rectangle(box.frame()));
                 return;
@@ -147,6 +160,24 @@ public class PptxDesignRenderer implements DesignRenderer {
             }
         }
         renderPlaceholder(slide, box, theme);
+    }
+
+    private static boolean isSvg(String ref) {
+        return ref != null && ref.toLowerCase().endsWith(".svg");
+    }
+
+    /** Rasterizes at 4x the point size for print-quality sharpness at typical logo dimensions. */
+    private static byte[] rasterizeSvgToPng(byte[] svgBytes, float widthPt, float heightPt) {
+        try {
+            PNGTranscoder transcoder = new PNGTranscoder();
+            transcoder.addTranscodingHint(PNGTranscoder.KEY_WIDTH, widthPt * 4);
+            transcoder.addTranscodingHint(PNGTranscoder.KEY_HEIGHT, heightPt * 4);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            transcoder.transcode(new TranscoderInput(new ByteArrayInputStream(svgBytes)), new TranscoderOutput(out));
+            return out.toByteArray();
+        } catch (TranscoderException e) {
+            throw new RuntimeException("Failed to rasterize SVG asset", e);
+        }
     }
 
     private void renderPlaceholder(XSLFSlide slide, ImageBox box, Theme theme) {

@@ -12,6 +12,7 @@ import com.tcs.contentGenerator.design.ComponentRole;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.DesignMeta;
 import com.tcs.contentGenerator.design.Frame;
+import com.tcs.contentGenerator.design.ImageBox;
 import com.tcs.contentGenerator.design.ShapeBox;
 import com.tcs.contentGenerator.design.SourceLink;
 import com.tcs.contentGenerator.design.TextBox;
@@ -37,14 +38,18 @@ public class LayoutEngine {
     private static final int EVENT_SUMMARY_CHARS = 140;
     private static final TextStyle DEFAULT_STYLE = new TextStyle("SansSerif", 10, "normal", "text", 14);
 
+    /** Well-known asset id the brand logo is always attached under (see {@link com.tcs.contentGenerator.agent.design.DesignCompositionAgent}). */
+    public static final String BRAND_LOGO_ASSET_ID = "brand-logo";
+    private static final double LOGO_SIZE = 40;
+    private static final double LOGO_GAP = 12;
+
     private final TextMeasurer measurer = new TextMeasurer();
 
     public DesignDocument layout(CompositionPlan plan, DesignTemplate template, String issueTitle, String jobId) {
         Theme theme = template.theme();
         Paginator p = new Paginator(theme);
 
-        placeText(p, ComponentRole.ISSUE_TITLE, "IssueTitle", styleOf(theme, "IssueTitle"),
-                issueTitle, null, p.contentWidth());
+        placeMasthead(p, theme, issueTitle);
         p.advance(SECTION_GAP);
 
         List<SectionComposition> sections = plan.sections();
@@ -183,6 +188,20 @@ public class LayoutEngine {
         double bodyHeight = measurer.heightOf(article.body(), bodyStyle, width);
         addTextAt(p, x, y + headHeight + PARAGRAPH_GAP, width, bodyHeight,
                 ComponentRole.ARTICLE_BODY, "Body", article.body(), link);
+    }
+
+    private void placeMasthead(Paginator p, Theme theme, String issueTitle) {
+        TextStyle style = styleOf(theme, "IssueTitle");
+        double textWidth = p.contentWidth() - LOGO_SIZE - LOGO_GAP;
+        double textHeight = measurer.heightOf(issueTitle, style, textWidth);
+        double h = p.reserve(Math.max(textHeight, LOGO_SIZE), "masthead");
+        double y = p.y();
+        p.add(new ImageBox(p.nextId(), ComponentRole.LOGO, new Frame(p.x(), y, LOGO_SIZE, LOGO_SIZE),
+                0, true, null, BRAND_LOGO_ASSET_ID, "Company logo"));
+        p.add(new TextBox(p.nextId(), ComponentRole.ISSUE_TITLE,
+                new Frame(p.x() + LOGO_SIZE + LOGO_GAP, y, textWidth, h), 0, false, null,
+                "IssueTitle", issueTitle));
+        p.advance(h);
     }
 
     private void placeSectionHeader(Paginator p, SectionComposition section, Theme theme) {
