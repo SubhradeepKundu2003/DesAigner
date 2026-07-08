@@ -853,11 +853,79 @@ test).
   MUST call `disableThinking()`.
 - Full suite 64/64 green (vision IT runs separately by design).
 
-**Current next-step queue:** (1) reference style extraction — ALL
-prerequisites now in place (multimodal client verified, 2 reference PDFs
-staged, PDFBox rasterization available): rasterize `storage/references/`
-pages → vision-LLM style description → draft `design-templates/*.json`;
-(2) per-section brand images (`storage/assets/<SECTION_NAME>/`); (3)
+**Reference style extraction DONE (2026-07-09): built, unit-tested (10
+tests), and verified live e2e** (booted 8096, Postgres + Ollama, explicit
+`DB_URL`): `POST /api/style-extraction/run` rasterized both staged
+reference PDFs, ran one vision call per page image + one structured merge
+call, and wrote a genuinely extracted draft template
+`storage/references/extracted/noir-luxe.json` — near-black background
+`#121214`, white text, gold primary `#D4AF37`, electric-blue secondary
+`#0A69C2`, font "Inter" — matching the references' dark + gold + blue
+look. Live run used a reduced budget (`max-images-per-document: 1`,
+`max-image-px: 768` via `SPRING_APPLICATION_JSON`) to keep CPU vision
+time in minutes; defaults are 3 images / 1024px.
+
+**Style extraction facts:**
+- New top-level package `styleextraction/` (deliberately NOT under
+  `agent/` — this is the first sliver of the future Design Learning
+  Pipeline, independent of the 9-agent generation chain):
+  `ReferenceRasterizer`, `StyleExtractionPrompts`, `StyleDescription`
+  (LLM merge DTO), `StyleExtractionService`;
+  `web/StyleExtractionController` (`POST /api/style-extraction/run`,
+  no-references → 409). Config under `app.style-extraction.*`
+  (references-root, output-dir, max-image-px, max-images-per-document).
+- `ReferenceRasterizer` (PDFBox `PDFRenderer`, scale 1.0 = 1px/pt):
+  normal pages render with longest side = `max-image-px`; pages with
+  aspect > 1.8 (the 595×2526pt scroll-style reference) render at full
+  width and are sliced vertically into `max-image-px`-tall segments,
+  labeled "part i/n, top to bottom". `max-images-per-document` caps
+  pages and slices alike.
+- Two-stage LLM design, per the house lessons: the vision pass asks for
+  **plain-text style notes** per page (<150 words — no JSON near prose),
+  one call per image, per-image failure isolation (a failed call loses
+  one page's notes, never the run); then **one structured text-only merge
+  call** → `StyleDescription` (flat object of scalar fields). Style only,
+  never geometry — the "LLM never produces coordinates" rule holds.
+- **New LLM-output lesson learned live (first e2e run):** the small model
+  sometimes answers a structured object request by echoing the **JSON
+  Schema itself** instead of an instance — which parses "successfully"
+  into a record with every field null (BeanOutputConverter ignores
+  unknown keys, so `$schema`/`type`/`properties` match nothing). Fixed
+  twice over: the merge prompt now shows a literal example instance
+  ("never repeat the JSON schema itself"), and `mergeNotes()` detects an
+  all-empty description, retries once, then degrades to the default
+  template's values (the page notes still reach the human in the result).
+  Direct-probe evidence: same prompt via curl returned a perfect instance
+  — plus a stray `"$schema"` key, confirming the schema confusion.
+- Deterministic mapping to the draft (`toDraftTemplate`): every color is
+  hex-validated (`#RRGGBB`) with per-role fallback to the default
+  template; the `text` role must clear the same 4.5:1 contrast ratio
+  Agent #9 gates on (vs. the extracted background) or it's replaced with
+  black/white — the TCS-Blue-issue-title trap, now guarded in code.
+  Text styles keep the default template's names/sizes/weights
+  (layout-tuned) — only font family and colors are restyled. The draft
+  reuses default page size/spacing.
+- The draft is written to `storage/references/extracted/<slug>.json` for
+  **human review** — `TemplateCatalog` still only loads from
+  `resources/design-templates/`; copy a vetted draft there (and add it to
+  the catalog's load list) to activate it. Extracted font families (e.g.
+  "Inter") are naturally not embedded — renderers fall back per the
+  existing font-name heuristic until real TTFs are added.
+- Tests: `ReferenceRasterizerTest` (3 — in-test PDFBox fixtures: scaling,
+  tall-page slicing, caps) and `StyleExtractionServiceTest` (7 — stubbed
+  LLM/rasterizer/storage: happy path incl. stored-JSON round-trip as a
+  loadable `DesignTemplate`, non-PDF skipped, invalid hex fallback,
+  contrast replacement, per-image failure isolation, schema-echo retry,
+  persistent-empty fallback). **Full suite 74/74 green.**
+- Throwaway diagnostic note: a hand-built `OllamaChatModel` probe hit a
+  Netty read timeout on the slow CPU merge call (the booted app's
+  Spring-configured client doesn't) — for future probes prefer direct
+  `curl` to `/api/chat` with `"think": false`.
+
+**Current next-step queue:** (1) per-section brand images
+(`storage/assets/<SECTION_NAME>/`); (2) review the extracted `noir-luxe`
+draft — if the user likes it, copy into `resources/design-templates/`,
+add to `TemplateCatalog`, and decide a template-selection rule; (3)
 Phase 4 Angular editor; (4) Phase 5 hardening; (5) Agents #1–#5 unit
 tests; (6) design API asset serve/upload endpoints.
 

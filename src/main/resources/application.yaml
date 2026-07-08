@@ -102,6 +102,19 @@ app:
     # storage/<brand-assets-root>/<NEWSLETTER_SECTION_NAME>/, with a GENERIC/
     # folder as the catch-all fallback. No config/code change needed to add one.
     brand-assets-root: assets
+  style-extraction:
+    # Design references (PDFs) the system learns visual style from — staged
+    # under storage/<references-root>/, never embedded in output. Extracted
+    # draft templates are written to storage/<output-dir>/ for human review;
+    # copy a draft into resources/design-templates/ to activate it.
+    references-root: references
+    output-dir: references/extracted
+    # Rasterization budget: pages render with their longest side at most
+    # max-image-px pixels (very tall scroll-style pages are rendered at full
+    # width and sliced instead), at most max-images-per-document images per
+    # reference PDF — each image is one vision LLM call, minutes on CPU.
+    max-image-px: 1024
+    max-images-per-document: 3
   review:
     # WCAG-style text/background contrast ratio a text box must meet or exceed.
     contrast-ratio-threshold: 4.5
