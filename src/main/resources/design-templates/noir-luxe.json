@@ -1,0 +1,27 @@
+{
+  "name": "noir-luxe",
+  "theme": {
+    "pageSize": { "widthPt": 595.28, "heightPt": 841.89 },
+    "spacing": { "marginPt": 48, "gutterPt": 16 },
+    "colors": {
+      "background": "#121214",
+      "surface": "#1A181C",
+      "text": "#FFFFFF",
+      "muted": "#B0B3BA",
+      "primary": "#D4AF37",
+      "secondary": "#0A69C2",
+      "accent": "#E5E7EB",
+      "divider": "#2F2E33"
+    },
+    "textStyles": {
+      "IssueTitle": { "fontFamily": "Inter", "fontSizePt": 28, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 34 },
+      "SectionTitle": { "fontFamily": "Inter", "fontSizePt": 16, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 20 },
+      "HeroHeadline": { "fontFamily": "Inter", "fontSizePt": 20, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 25 },
+      "Headline": { "fontFamily": "Inter", "fontSizePt": 13, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 17 },
+      "Body": { "fontFamily": "Inter", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 },
+      "Stat": { "fontFamily": "Inter", "fontSizePt": 32, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 36 },
+      "StatLabel": { "fontFamily": "Inter", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
+      "EventItem": { "fontFamily": "Inter", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
+    }
+  }
+}

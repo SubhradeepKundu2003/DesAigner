@@ -21,13 +21,14 @@ import tools.jackson.databind.json.JsonMapper;
  */
 class TemplateCatalogTest {
 
+    private static final Set<String> ALL_TEMPLATES = Set.of("tcs-brand", "td-classic", "noir-luxe");
     private static final Set<String> REQUIRED_TEXT_STYLES = Set.of(
             "IssueTitle", "SectionTitle", "HeroHeadline", "Headline",
             "Body", "Stat", "StatLabel", "EventItem");
     private static final Set<String> REQUIRED_COLOR_ROLES = Set.of(
             "background", "surface", "text", "muted", "primary", "secondary", "accent", "divider");
 
-    private final TemplateCatalog catalog = new TemplateCatalog(JsonMapper.builder().build());
+    private final TemplateCatalog catalog = new TemplateCatalog(JsonMapper.builder().build(), "tcs-brand");
 
     @Test
     void defaultTemplateIsTcsBrand() {
@@ -35,9 +36,23 @@ class TemplateCatalogTest {
     }
 
     @Test
-    void tdClassicIsStillLoadableByName() {
-        assertDoesNotThrow(() -> catalog.get("td-classic"));
-        assertEquals("td-classic", catalog.get("td-classic").name());
+    void everyTemplateIsLoadableByName() {
+        for (String name : ALL_TEMPLATES) {
+            assertDoesNotThrow(() -> catalog.get(name));
+            assertEquals(name, catalog.get(name).name());
+        }
+    }
+
+    @Test
+    void defaultIsConfigurable() {
+        TemplateCatalog noirDefault = new TemplateCatalog(JsonMapper.builder().build(), "noir-luxe");
+        assertEquals("noir-luxe", noirDefault.getDefault().name());
+    }
+
+    @Test
+    void unknownConfiguredDefaultFailsAtStartup() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new TemplateCatalog(JsonMapper.builder().build(), "does-not-exist"));
     }
 
     @Test
@@ -46,14 +61,18 @@ class TemplateCatalogTest {
     }
 
     @Test
-    void tcsBrandDefinesAllRequiredTextStyleKeys() {
-        Theme theme = catalog.get("tcs-brand").theme();
-        assertEquals(REQUIRED_TEXT_STYLES, theme.textStyles().keySet());
+    void everyTemplateDefinesAllRequiredTextStyleKeys() {
+        for (String name : ALL_TEMPLATES) {
+            Theme theme = catalog.get(name).theme();
+            assertEquals(REQUIRED_TEXT_STYLES, theme.textStyles().keySet(), name);
+        }
     }
 
     @Test
-    void tcsBrandDefinesAllRequiredColorRoles() {
-        Theme theme = catalog.get("tcs-brand").theme();
-        assertEquals(REQUIRED_COLOR_ROLES, theme.colors().keySet());
+    void everyTemplateDefinesAllRequiredColorRoles() {
+        for (String name : ALL_TEMPLATES) {
+            Theme theme = catalog.get(name).theme();
+            assertEquals(REQUIRED_COLOR_ROLES, theme.colors().keySet(), name);
+        }
     }
 }

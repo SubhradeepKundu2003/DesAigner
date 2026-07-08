@@ -44,9 +44,10 @@ public class DesignCompositionAgent implements Agent {
     private static final Pattern NUMBER = Pattern.compile("\\d[\\d,]*(?:\\.\\d+)?");
 
     private static final String BRAND_LOGO_FOLDER = "BRAND";
-    /** Black variant: every current template has a white page background, and the brand
-     *  guide itself prefers black for contrast. Revisit if a dark-background template ships. */
-    private static final String BRAND_LOGO_FILENAME = "logo_black.svg";
+    /** Chosen per theme: black on light page backgrounds (brand-guide preference),
+     *  white on dark ones (e.g. the extracted {@code noir-luxe} template). */
+    private static final String BRAND_LOGO_LIGHT_BG = "logo_black.svg";
+    private static final String BRAND_LOGO_DARK_BG = "logo_white.svg";
     /** Section icon files: {@code assets/ICONS/<NewsletterSection name>.<ext>} — see {@link IconMatcher}. */
     private static final String ICONS_FOLDER = "ICONS";
 
@@ -77,7 +78,13 @@ public class DesignCompositionAgent implements Agent {
         }
 
         DesignTemplate template = templates.getDefault();
-        Map<NewsletterSection, String> iconRefs = listSectionIcons();
+        boolean darkBackground = isDark(template.theme().colors().get("background"));
+        // The section icon files are black stroke SVGs — invisible on a dark page.
+        // Dark themes keep the colored-dot fallback (theme roles, always visible).
+        Map<NewsletterSection, String> iconRefs = darkBackground ? Map.of() : listSectionIcons();
+        if (darkBackground) {
+            log.info("Dark page background — using the white logo variant and dot section icons");
+        }
         List<SectionComposition> sections = newsletter.sections().stream()
                 .filter(section -> !section.articles().isEmpty())
                 .map(section -> compose(section, iconRefs))
@@ -86,7 +93,8 @@ public class DesignCompositionAgent implements Agent {
         DesignDocument document = layoutEngine.layout(plan, template, newsletter.issueTitle(), context.getJobId());
         List<Asset> assets = new ArrayList<>();
         assets.add(new Asset(LayoutEngine.BRAND_LOGO_ASSET_ID, "image",
-                brandAssetsRoot + "/" + BRAND_LOGO_FOLDER + "/" + BRAND_LOGO_FILENAME, null, null));
+                brandAssetsRoot + "/" + BRAND_LOGO_FOLDER + "/"
+                        + (darkBackground ? BRAND_LOGO_DARK_BG : BRAND_LOGO_LIGHT_BG), null, null));
         for (SectionComposition section : sections) {
             if (section.iconAssetId() != null) {
                 assets.add(new Asset(section.iconAssetId(), "image", iconRefs.get(section.section()), null, null));
@@ -148,6 +156,26 @@ public class DesignCompositionAgent implements Agent {
             }
         }
         return refs;
+    }
+
+    /**
+     * WCAG relative luminance below 0.5 (same math the review agent's contrast
+     * lint uses). A missing/unparseable background counts as light — the
+     * pre-dark-template behavior.
+     */
+    private static boolean isDark(String hexBackground) {
+        if (hexBackground == null || !hexBackground.matches("#[0-9a-fA-F]{6}")) {
+            return false;
+        }
+        int rgb = Integer.parseInt(hexBackground.substring(1), 16);
+        double r = luminanceChannel((rgb >> 16 & 0xFF) / 255.0);
+        double g = luminanceChannel((rgb >> 8 & 0xFF) / 255.0);
+        double b = luminanceChannel((rgb & 0xFF) / 255.0);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5;
+    }
+
+    private static double luminanceChannel(double c) {
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
     }
 
     /**

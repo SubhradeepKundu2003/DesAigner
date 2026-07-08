@@ -97,6 +97,11 @@ app:
         - game-changer
         - low-hanging fruit
         - paradigm shift
+  design:
+    # Active design template (resources/design-templates/<name>.json).
+    # Available: tcs-brand (default), td-classic, noir-luxe (dark, extracted
+    # from the reference PDFs by style extraction).
+    template: tcs-brand
   graphics:
     # Approved brand images, one file per section under
     # storage/<brand-assets-root>/<NEWSLETTER_SECTION_NAME>/, with a GENERIC/

@@ -29,7 +29,11 @@ import tools.jackson.databind.json.JsonMapper;
  */
 class DesignCompositionAgentTest {
 
-    private static final TemplateCatalog TEMPLATES = new TemplateCatalog(JsonMapper.builder().build());
+    private static final TemplateCatalog TEMPLATES =
+            new TemplateCatalog(JsonMapper.builder().build(), "tcs-brand");
+    /** Same catalog, dark-background template active — exercises the dark-theme branches. */
+    private static final TemplateCatalog DARK_TEMPLATES =
+            new TemplateCatalog(JsonMapper.builder().build(), "noir-luxe");
 
     private static PipelineContext contextWithNewsletter() {
         GeneratedArticle article = new GeneratedArticle("Delivery headline",
@@ -111,6 +115,31 @@ class DesignCompositionAgentTest {
 
         // The newsletter only has DELIVERY_HIGHLIGHTS; the events icon is unused.
         assertEquals(1, context.getDesignDocument().assets().size(), "only the logo should be attached");
+    }
+
+    @Test
+    void darkTemplateGetsTheWhiteLogoVariant() {
+        DesignCompositionAgent agent = new DesignCompositionAgent(DARK_TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of()), "assets");
+        PipelineContext context = contextWithNewsletter();
+
+        agent.execute(context);
+
+        Asset logo = context.getDesignDocument().assets().get(0);
+        assertEquals("assets/BRAND/logo_white.svg", logo.storedRef());
+    }
+
+    @Test
+    void darkTemplateSkipsBlackIconFilesAndKeepsDotFallback() {
+        DesignCompositionAgent agent = new DesignCompositionAgent(DARK_TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of("assets/ICONS/DELIVERY_HIGHLIGHTS.svg")), "assets");
+        PipelineContext context = contextWithNewsletter();
+
+        agent.execute(context);
+
+        // the icon file exists, but black strokes are invisible on #121214 —
+        // only the logo asset must be attached
+        assertEquals(1, context.getDesignDocument().assets().size());
     }
 
     /** Fake storage: {@code list} returns a fixed listing, everything else is unreachable. */

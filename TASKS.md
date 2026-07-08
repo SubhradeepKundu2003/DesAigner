@@ -922,10 +922,33 @@ time in minutes; defaults are 3 images / 1024px.
   Spring-configured client doesn't) — for future probes prefer direct
   `curl` to `/api/chat` with `"think": false`.
 
+**noir-luxe ACTIVATED as a template (2026-07-09, user-approved): built,
+unit-tested, verified live e2e.** `resources/design-templates/noir-luxe.json`
+(colors exactly as extracted; font "Inter" kept as extracted — not embedded,
+renderers fall back to generic sans; swap to "Houschka Rounded" for the
+embedded brand font if preferred). `TemplateCatalog` now loads all three
+templates and the **default is config: `app.design.template`** (default
+`tcs-brand`; unknown name fails at startup, not silently). Activating a
+dark template hit both deferred "revisit if a dark background ships"
+assumptions, fixed in `DesignCompositionAgent` via a WCAG-luminance
+`isDark(background)` check (< 0.5): (1) logo is now theme-aware —
+`logo_white.svg` on dark pages, `logo_black.svg` otherwise; (2) the black
+stroke section-icon SVGs are skipped on dark pages (invisible on `#121214`)
+— those sections keep the colored-dot fallback, which uses theme roles and
+stays visible. Verified live e2e (booted 8096 with
+`app.design.template: noir-luxe` via `SPRING_APPLICATION_JSON`): full
+pipeline on the small sample → 1 page / 14 components, review score
+100/100 with 0 layout findings (white-on-`#121214` clears the 4.5:1
+contrast lint), HTML/PDF/PPTX all exported valid — PDF visually confirmed:
+dark page, white TCS logo in the masthead, gold `#D4AF37` dots, stat
+callout, brand-asset image. Suite **78/78** green (TemplateCatalogTest
+extended to all templates + configurable/unknown default;
+DesignCompositionAgentTest + white-logo and dark-skips-icons tests).
+
 **Current next-step queue:** (1) per-section brand images
-(`storage/assets/<SECTION_NAME>/`); (2) review the extracted `noir-luxe`
-draft — if the user likes it, copy into `resources/design-templates/`,
-add to `TemplateCatalog`, and decide a template-selection rule; (3)
+(`storage/assets/<SECTION_NAME>/`); (2) template-selection UX (per-run
+choice via API/UI — today the default is a config flip; also consider
+white section-icon variants so dark templates get real icons); (3)
 Phase 4 Angular editor; (4) Phase 5 hardening; (5) Agents #1–#5 unit
 tests; (6) design API asset serve/upload endpoints.
 
