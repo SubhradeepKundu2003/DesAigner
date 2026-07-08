@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Reference design material (large binary inputs, not code) ###
+storage/references/

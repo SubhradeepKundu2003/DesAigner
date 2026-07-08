@@ -3,6 +3,7 @@ package com.tcs.contentGenerator.agent.design;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import com.tcs.contentGenerator.agent.planning.NewsletterSection;
 import com.tcs.contentGenerator.design.Asset;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.orchestrator.PipelineContext;
+import com.tcs.contentGenerator.storage.StorageService;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -42,7 +44,8 @@ class DesignCompositionAgentTest {
 
     @Test
     void attachesUnconditionalBrandLogoAsset() {
-        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(), "assets");
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of()), "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -56,7 +59,8 @@ class DesignCompositionAgentTest {
 
     @Test
     void logoStoredRefRespectsBrandAssetsRootProperty() {
-        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(), "custom-root");
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of()), "custom-root");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -67,7 +71,8 @@ class DesignCompositionAgentTest {
 
     @Test
     void usesCatalogDefaultTemplate() {
-        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(), "assets");
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of()), "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -75,5 +80,64 @@ class DesignCompositionAgentTest {
         assertTrue(context.getDesignDocument().theme().colors().values().contains("#4E84C4"),
                 "expected the design to use the tcs-brand theme (TCS Blue present)");
         assertEquals(TEMPLATES.getDefault().theme(), context.getDesignDocument().theme());
+    }
+
+    @Test
+    void attachesIconAssetWhenSectionIconFileExists() {
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of(
+                        "assets/ICONS/DELIVERY_HIGHLIGHTS.svg",
+                        "assets/ICONS/readme.txt")),
+                "assets");
+        PipelineContext context = contextWithNewsletter();
+
+        agent.execute(context);
+
+        DesignDocument document = context.getDesignDocument();
+        assertEquals(2, document.assets().size(), "expected logo + one section icon");
+        Asset icon = document.assets().stream()
+                .filter(a -> a.id().equals("icon-DELIVERY_HIGHLIGHTS"))
+                .findFirst().orElseThrow(() -> new AssertionError("expected an icon asset for the section"));
+        assertEquals("assets/ICONS/DELIVERY_HIGHLIGHTS.svg", icon.storedRef());
+    }
+
+    @Test
+    void sectionWithoutIconFileKeepsNoIconAsset() {
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of("assets/ICONS/UPCOMING_EVENTS.svg")), "assets");
+        PipelineContext context = contextWithNewsletter();
+
+        agent.execute(context);
+
+        // The newsletter only has DELIVERY_HIGHLIGHTS; the events icon is unused.
+        assertEquals(1, context.getDesignDocument().assets().size(), "only the logo should be attached");
+    }
+
+    /** Fake storage: {@code list} returns a fixed listing, everything else is unreachable. */
+    private record ListingStorage(List<String> refs) implements StorageService {
+        @Override
+        public String store(String relativePath, byte[] content) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public byte[] retrieve(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Path resolve(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void delete(String ref) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<String> list(String relativeDir) {
+            return refs;
+        }
     }
 }

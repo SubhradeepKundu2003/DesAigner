@@ -719,6 +719,148 @@ possibly all three renderers (`render/html|pptx|pdf`). Once design quality is
 settled, return to: Phase 4 (Angular visual editor), Phase 5 (hardening), and
 the still-open unit-test/asset-endpoint gaps noted above.
 
+> **The paragraph above is partially superseded by what actually happened
+> next — see the dated updates below** (TCS brand template + logo landed
+> 2026-07-05 the same day, real fonts + reference PDFs landed 2026-07-08).
+
+**TCS Brand Template DONE (2026-07-05, same day as Agent #9): user pivoted
+from "reference images" to a concrete TCS brand-guide spec** (colors, logo
+placement, font, one template) — reference-image style extraction stays
+designed-but-unstarted (see updates below for the assets it now has waiting).
+New `resources/design-templates/tcs-brand.json` is `TemplateCatalog`'s
+**default** (flipped from `td-classic`, still loadable by name). Real TCS
+palette mapped onto the existing 8-role `Theme.colors()`: black/white
+dominant, TCS Blue `#4E84C4` `primary`, Yellow `#FBB034` `secondary`, Green
+`#54B948` `accent` (icon dots), derived gray tints for `muted`/`divider`/
+`surface`. **Contrast gotcha:** TCS Blue on white ≈3.87:1, below Agent #9's
+4.5:1 gate — so `IssueTitle`/`Stat` use colorRole `text` (black), not
+`primary`, or every issue would flag its own title. Font family is
+"Houschka Rounded"; `render/font/BrandFontRegistry` (`@Component`) scans
+`resources/fonts/` at startup, no-ops cleanly if absent, registers with AWT
+`GraphicsEnvironment`, and exposes bytes for `HtmlDesignRenderer`'s
+`@font-face` injection and `PdfDesignRenderer`'s mandatory `useFont(...)`
+(openhtmltopdf never substitutes system fonts — needs bytes explicitly).
+PPTX gets no font embedding (POI/XSLF limitation, accepted). **Latent XHTML
+bug found+fixed:** `fontFamilyCss` must single-quote multi-word family names
+— they sit inside a double-quoted `style="..."` attribute; double quotes
+break openhtmltopdf's strict XML parse. Logo: new `ComponentRole.LOGO`,
+placed by `LayoutEngine.placeMasthead` beside `ISSUE_TITLE`, backed by a
+fixed brand-logo `Asset` unconditionally attached by
+`DesignCompositionAgent` — renders as the dashed placeholder until a real
+file exists at the path. Verified live e2e (booted 8094); tests:
+`TemplateCatalogTest`, `DesignCompositionAgentTest`, `BrandFontRegistryTest`,
+`HtmlDesignRendererTest`, extended `LayoutEngineTest`/`PdfDesignRendererTest`.
+
+**Real TCS logo DONE (2026-07-05): `storage/assets/BRAND/logo_black.svg` +
+`logo_white.svg`** (2000×2000 viewBox). Broke two "drop a file later"
+assumptions: (1) convention said `logo.png`, real files are SVG —
+`DesignCompositionAgent.BRAND_LOGO_FILENAME` now hardcodes
+`"logo_black.svg"` (black: all templates have white backgrounds); (2) **no
+renderer had SVG support** — `HtmlDesignRenderer.mimeTypeOf` gained
+`.svg`→`image/svg+xml` (browsers render SVG data URIs natively); PDF needed
+the sibling `openhtmltopdf-svg-support:1.1.40` artifact wired via
+`builder.useSVGDrawer(new BatikSVGDrawer())` (try-with-resources; Batik
+draws SVG as a vector `PDFormXObject`, not a raster image); PPTX rasterizes
+SVG→PNG at render time via Batik's `PNGTranscoder` (transitively available)
+at 4x frame size before the existing `addPicture` path. Verified live e2e
+(booted 8095): real SVG in HTML data URI, valid PPTX/PDF, sizes grew
+meaningfully vs. placeholder run.
+
+**Real brand fonts DONE (2026-07-08): 6 `HouschkaRoundedAlt-*.ttf` files
+dropped at `src/main/resources/fonts/`** (Light/Medium/DemiBold + italics).
+Filenames did NOT match the expected `houschka-rounded-{regular,bold}.ttf`,
+so "zero code changes" didn't hold: `BrandFontRegistry.CANDIDATE_FILES` is
+now a candidate *list* per weight (first existing wins) — normal →
+`HouschkaRoundedAlt-Medium.ttf`, bold → `HouschkaRoundedAlt-DemiBold.ttf`
+(Light/italics unused, harmless in the jar). Internal TTF family is
+"Houschka Rounded Alt Medium/DemiBold" — irrelevant to HTML/PDF, which
+declare the bytes under the theme's `"Houschka Rounded"` name; only AWT
+`TextMeasurer` lookup misses (falls back to Dialog for measuring — same
+estimate behavior as before fonts existed, no regression).
+`BrandFontRegistryTest` flipped to assert both weights present; two
+`HtmlDesignRendererTest` tests that relied on an empty classpath now use an
+`emptyRegistry()` stub to keep covering the no-font fallback, plus a new
+test asserting both `@font-face` weights emit from the real files. **Full
+suite 59/59 green.** HTML + PDF exports now carry the real embedded brand
+font; PPTX names it only (viewer must have it installed).
+
+**Reference newsletter PDFs staged (2026-07-08), new convention:
+`storage/references/`** — design references the system will *learn style
+from* (never embedded in output), deliberately separate from
+`storage/assets/` (things *placed into* newsletters) and `samples/` (content
+input for ingestion testing). Present and probe-verified via PDFBox:
+`TCSWordTemplate.pdf` (6 pages, A4 portrait 595×842pt — same page size as
+our templates) and `NewsLetter01.pdf` (1 page, 595×2526pt scroll/email-style,
+57 MB — tall page will need segmenting or scaling when rasterized for the
+vision model). **Nothing reads this folder yet** — consuming it is the
+reference-image style-extraction work above, still gated on the
+`LlmClient` multimodal probe (Spring AI 2.0 Ollama image plumbing,
+unverified).
+
+**Asset inventory as of 2026-07-08:** fonts ✅ (6 TTFs, 2 wired) · logo ✅
+(black+white SVG) · section icons ❌ (`storage/assets/ICONS/` created by the
+user but empty — needs 9 files named `<NewsletterSection name>.png` ~128px,
+plus the small `IconMatcher` ShapeBox→ImageBox change + `LayoutEngine`
+section-header wiring when they arrive) · per-section images ❌ (only
+`GENERIC/team-photo.png`; folders per section name, any count, zero code
+changes) · reference PDFs ✅ (2 staged, unconsumed).
+
+**Default section icons DONE (2026-07-08, user-approved "use default made
+icons"):** 9 hand-authored black stroke-style SVGs (24×24 viewBox,
+feather-icon idiom) at `storage/assets/ICONS/<NewsletterSection name>.svg` —
+message bubble / check-circle / clipboard / lightbulb / thumbs-up / medal /
+open book / calendar / newspaper. Wiring: `SectionComposition` gained a
+nullable `iconAssetId` (5th component); `DesignCompositionAgent` gained a
+`StorageService` dependency and lists `assets/ICONS/` once per run,
+matching file basenames (case-insensitive, any extension) to section enum
+names — matched sections get an `Asset` (`icon-<SECTION_NAME>`, via new
+`IconMatcher.assetIdFor`); `LayoutEngine.placeSectionHeader` places a
+12pt `ImageBox` when `iconAssetId` is set, else the original 10pt colored
+dot (`IconMatcher.colorRoleFor` unchanged as fallback). Renderers needed
+zero changes (ImageBox + SVG support already existed). User can replace any
+icon by overwriting its file — no code change. New
+`SectionIconAssetsTest` guards that every section has an icon file AND
+each rasterizes through Batik (the strictest consumer: a malformed SVG
+would fail PPTX export at runtime, so it fails there first). Tests updated:
+`LayoutEngineTest` (+ ImageBox-icon test), `DesignCompositionAgentTest`
+(fake listing storage; + icon-asset attach test, + unused-icon-not-attached
+test).
+
+**Multimodal LlmClient DONE + Spring AI Ollama image plumbing VERIFIED
+(2026-07-08)** — the "unverified assumption" above is now closed, positive:
+- Direct probe: Ollama `/api/chat` with a base64 128×128 solid-red PNG on
+  `qwen3.5:4b` → answered "Red". Model-side vision works.
+- Jar inspection: `OllamaChatModel` bytecode references `getMedia` →
+  `images`, i.e. Spring AI 2.0's Ollama backend converts message `Media`
+  to the chat request's `images` field — not a no-op.
+- `llm/LlmImage` (mimeType + bytes record, `png()`/`jpeg()` factories) and
+  `LlmClient.generate(system, user, List<LlmImage>)` — a **default method
+  that throws** `UnsupportedOperationException`, so text-only
+  implementations and the existing anonymous test fakes
+  (`ReviewAgentTest`, `BrandComplianceAgentTest`) compile untouched.
+  `SpringAiLlmClient` overrides it: images become
+  `new Media(MimeType, ByteArrayResource)` on the user message.
+- Live e2e proof through our own client: `SpringAiLlmClientVisionIT`
+  (IT suffix = outside Surefire's default includes; run explicitly with
+  `-Dtest=SpringAiLlmClientVisionIT`, self-skips if Ollama is down) builds
+  a real `OllamaChatModel` programmatically (no app boot, no Postgres) and
+  asserts the model sees a red square. **Gotcha found live:** with default
+  options the call ran >20 min then died with an I/O error — qwen3.5's
+  *thinking* mode was on (the app's `spring.ai.ollama.chat.think: false`
+  doesn't apply to hand-built options). Spring AI 2.0's
+  `OllamaChatOptions.builder()` has `disableThinking()` — with it, the
+  same call passes in ~18s. Any future hand-constructed Ollama options
+  MUST call `disableThinking()`.
+- Full suite 64/64 green (vision IT runs separately by design).
+
+**Current next-step queue:** (1) reference style extraction — ALL
+prerequisites now in place (multimodal client verified, 2 reference PDFs
+staged, PDFBox rasterization available): rasterize `storage/references/`
+pages → vision-LLM style description → draft `design-templates/*.json`;
+(2) per-section brand images (`storage/assets/<SECTION_NAME>/`); (3)
+Phase 4 Angular editor; (4) Phase 5 hardening; (5) Agents #1–#5 unit
+tests; (6) design API asset serve/upload endpoints.
+
 ### Design Intelligence Platform vision v2 (refined 2026-07-05 — incorporates specialized repositories, feedback loop, versioning, constraints, pattern learning/selection split; refines `ARCHITECTURE.md`, **NOT YET APPROVED, user is verifying before any code or `ARCHITECTURE.md` changes**)
 
 **Scope, reaffirmed explicitly per user instruction:** this platform is

@@ -34,6 +34,8 @@ public class LayoutEngine {
     private static final double SECTION_GAP = 24;
     private static final double DIVIDER_HEIGHT = 2;
     private static final double ICON_SIZE = 10;
+    /** Real icon images get slightly more room than the fallback dot. */
+    private static final double ICON_IMAGE_SIZE = 12;
     private static final double ICON_GAP = 6;
     private static final int EVENT_SUMMARY_CHARS = 140;
     private static final TextStyle DEFAULT_STYLE = new TextStyle("SansSerif", 10, "normal", "text", 14);
@@ -206,14 +208,21 @@ public class LayoutEngine {
 
     private void placeSectionHeader(Paginator p, SectionComposition section, Theme theme) {
         TextStyle style = styleOf(theme, "SectionTitle");
-        double textWidth = p.contentWidth() - ICON_SIZE - ICON_GAP;
+        boolean hasIconAsset = section.iconAssetId() != null;
+        double iconSize = hasIconAsset ? ICON_IMAGE_SIZE : ICON_SIZE;
+        double textWidth = p.contentWidth() - iconSize - ICON_GAP;
         double textHeight = measurer.heightOf(section.section().title(), style, textWidth);
-        double h = p.reserve(Math.max(textHeight, ICON_SIZE), "section-title:" + section.section().title());
+        double h = p.reserve(Math.max(textHeight, iconSize), "section-title:" + section.section().title());
         double y = p.y();
-        p.add(new ShapeBox(p.nextId(), ComponentRole.SECTION_ICON, new Frame(p.x(), y, ICON_SIZE, ICON_SIZE),
-                0, false, null, "circle", section.iconColorRole()));
+        if (hasIconAsset) {
+            p.add(new ImageBox(p.nextId(), ComponentRole.SECTION_ICON, new Frame(p.x(), y, iconSize, iconSize),
+                    0, true, null, section.iconAssetId(), section.section().title() + " icon"));
+        } else {
+            p.add(new ShapeBox(p.nextId(), ComponentRole.SECTION_ICON, new Frame(p.x(), y, iconSize, iconSize),
+                    0, false, null, "circle", section.iconColorRole()));
+        }
         p.add(new TextBox(p.nextId(), ComponentRole.SECTION_TITLE,
-                new Frame(p.x() + ICON_SIZE + ICON_GAP, y, textWidth, h), 0, false, null,
+                new Frame(p.x() + iconSize + ICON_GAP, y, textWidth, h), 0, false, null,
                 "SectionTitle", section.section().title()));
         p.advance(h);
     }

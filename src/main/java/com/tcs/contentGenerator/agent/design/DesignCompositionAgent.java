@@ -1,6 +1,10 @@
 package com.tcs.contentGenerator.agent.design;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,6 +23,7 @@ import com.tcs.contentGenerator.design.Asset;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.orchestrator.Agent;
 import com.tcs.contentGenerator.orchestrator.PipelineContext;
+import com.tcs.contentGenerator.storage.StorageService;
 
 /**
  * Agent #7 of the pipeline. Turns the compliance-corrected {@link GeneratedNewsletter}
@@ -42,15 +47,19 @@ public class DesignCompositionAgent implements Agent {
     /** Black variant: every current template has a white page background, and the brand
      *  guide itself prefers black for contrast. Revisit if a dark-background template ships. */
     private static final String BRAND_LOGO_FILENAME = "logo_black.svg";
+    /** Section icon files: {@code assets/ICONS/<NewsletterSection name>.<ext>} — see {@link IconMatcher}. */
+    private static final String ICONS_FOLDER = "ICONS";
 
     private final TemplateCatalog templates;
     private final LayoutEngine layoutEngine;
+    private final StorageService storage;
     private final String brandAssetsRoot;
 
-    public DesignCompositionAgent(TemplateCatalog templates, LayoutEngine layoutEngine,
+    public DesignCompositionAgent(TemplateCatalog templates, LayoutEngine layoutEngine, StorageService storage,
             @Value("${app.graphics.brand-assets-root:assets}") String brandAssetsRoot) {
         this.templates = templates;
         this.layoutEngine = layoutEngine;
+        this.storage = storage;
         this.brandAssetsRoot = brandAssetsRoot;
     }
 
@@ -68,45 +77,77 @@ public class DesignCompositionAgent implements Agent {
         }
 
         DesignTemplate template = templates.getDefault();
+        Map<NewsletterSection, String> iconRefs = listSectionIcons();
         List<SectionComposition> sections = newsletter.sections().stream()
                 .filter(section -> !section.articles().isEmpty())
-                .map(this::compose)
+                .map(section -> compose(section, iconRefs))
                 .toList();
         CompositionPlan plan = new CompositionPlan(template.name(), sections);
         DesignDocument document = layoutEngine.layout(plan, template, newsletter.issueTitle(), context.getJobId());
-        Asset logo = new Asset(LayoutEngine.BRAND_LOGO_ASSET_ID, "image",
-                brandAssetsRoot + "/" + BRAND_LOGO_FOLDER + "/" + BRAND_LOGO_FILENAME, null, null);
+        List<Asset> assets = new ArrayList<>();
+        assets.add(new Asset(LayoutEngine.BRAND_LOGO_ASSET_ID, "image",
+                brandAssetsRoot + "/" + BRAND_LOGO_FOLDER + "/" + BRAND_LOGO_FILENAME, null, null));
+        for (SectionComposition section : sections) {
+            if (section.iconAssetId() != null) {
+                assets.add(new Asset(section.iconAssetId(), "image", iconRefs.get(section.section()), null, null));
+            }
+        }
         document = new DesignDocument(document.schemaVersion(), document.revision(), document.meta(),
-                document.theme(), List.of(logo), document.pages());
+                document.theme(), List.copyOf(assets), document.pages());
         context.setDesignDocument(document);
         log.info("Design composition produced {} page(s) from {} section(s) using template '{}'",
                 document.pages().size(), sections.size(), template.name());
     }
 
-    private SectionComposition compose(GeneratedSection section) {
+    private SectionComposition compose(GeneratedSection section, Map<NewsletterSection, String> iconRefs) {
         NewsletterSection newsletterSection = section.section();
         List<GeneratedArticle> articles = section.articles();
         String iconColorRole = IconMatcher.colorRoleFor(newsletterSection);
+        String iconAssetId = iconRefs.containsKey(newsletterSection)
+                ? IconMatcher.assetIdFor(newsletterSection) : null;
 
         if (newsletterSection == NewsletterSection.LEADERSHIP_MESSAGE) {
-            return new SectionComposition(newsletterSection, SectionPattern.HERO, articles, iconColorRole, null, null);
+            return new SectionComposition(newsletterSection, SectionPattern.HERO, articles, iconColorRole,
+                    iconAssetId, null, null);
         }
         if (newsletterSection == NewsletterSection.UPCOMING_EVENTS) {
             return new SectionComposition(newsletterSection, SectionPattern.EVENT_LIST, articles, iconColorRole,
-                    null, null);
+                    iconAssetId, null, null);
         }
         if (articles.size() == 1) {
             String[] stat = extractStat(articles.get(0));
             if (stat != null) {
                 return new SectionComposition(newsletterSection, SectionPattern.STAT_CALLOUT, articles,
-                        iconColorRole, stat[0], stat[1]);
+                        iconColorRole, iconAssetId, stat[0], stat[1]);
             }
         }
         if (articles.size() == 2) {
             return new SectionComposition(newsletterSection, SectionPattern.TWO_COLUMN, articles, iconColorRole,
-                    null, null);
+                    iconAssetId, null, null);
         }
-        return new SectionComposition(newsletterSection, SectionPattern.STANDARD, articles, iconColorRole, null, null);
+        return new SectionComposition(newsletterSection, SectionPattern.STANDARD, articles, iconColorRole,
+                iconAssetId, null, null);
+    }
+
+    /**
+     * One storage listing per run: every file under {@code assets/ICONS/} whose
+     * basename (case-insensitive, any extension) is a {@link NewsletterSection}
+     * name becomes that section's icon. Missing folder or unmatched files are
+     * simply skipped — sections without an icon keep the colored-dot fallback.
+     */
+    private Map<NewsletterSection, String> listSectionIcons() {
+        Map<NewsletterSection, String> refs = new EnumMap<>(NewsletterSection.class);
+        for (String ref : storage.list(brandAssetsRoot + "/" + ICONS_FOLDER)) {
+            String base = ref.substring(ref.lastIndexOf('/') + 1);
+            int dot = base.lastIndexOf('.');
+            String name = (dot > 0 ? base.substring(0, dot) : base).toUpperCase(Locale.ROOT);
+            try {
+                refs.putIfAbsent(NewsletterSection.valueOf(name), ref);
+            } catch (IllegalArgumentException notASectionName) {
+                log.debug("Ignoring non-section file in {}: {}", ICONS_FOLDER, ref);
+            }
+        }
+        return refs;
     }
 
     /**

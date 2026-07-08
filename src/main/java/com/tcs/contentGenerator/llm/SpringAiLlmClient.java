@@ -1,9 +1,14 @@
 package com.tcs.contentGenerator.llm;
 
+import java.util.List;
+
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.content.Media;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.MimeType;
 
 /**
  * {@link LlmClient} backed by Spring AI's {@link ChatClient}. Spring AI already
@@ -25,6 +30,24 @@ public class SpringAiLlmClient implements LlmClient {
         return chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
+                .call()
+                .content();
+    }
+
+    /**
+     * Vision variant: images ride the user message as Spring AI {@link Media};
+     * the Ollama backend converts each to the chat message's {@code images}
+     * field (base64) — verified live against the local {@code qwen3.5:4b},
+     * which correctly described a probe image through this exact path.
+     */
+    @Override
+    public String generate(String systemPrompt, String userPrompt, List<LlmImage> images) {
+        Media[] media = images.stream()
+                .map(img -> new Media(MimeType.valueOf(img.mimeType()), new ByteArrayResource(img.bytes())))
+                .toArray(Media[]::new);
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .user(user -> user.text(userPrompt).media(media))
                 .call()
                 .content();
     }

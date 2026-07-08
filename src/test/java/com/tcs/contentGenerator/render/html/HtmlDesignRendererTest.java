@@ -49,13 +49,39 @@ class HtmlDesignRendererTest {
                 List.of(new Page("page-1", List.of(body))));
     }
 
+    /**
+     * Real font files now live on the classpath, so the "no brand font" state
+     * has to be simulated — the fallback path must keep working for any
+     * template whose font is not bundled.
+     */
+    private static BrandFontRegistry emptyRegistry() {
+        return new BrandFontRegistry() {
+            @Override
+            public Optional<byte[]> bytesFor(String weight) {
+                return Optional.empty();
+            }
+        };
+    }
+
     @Test
     void omitsFontFaceRuleWhenBrandFontFileIsAbsent() {
-        HtmlDesignRenderer renderer = new HtmlDesignRenderer(new NoopStorageService(), new BrandFontRegistry());
+        HtmlDesignRenderer renderer = new HtmlDesignRenderer(new NoopStorageService(), emptyRegistry());
 
         String html = renderer.renderHtml(documentWithOneTextBox(), "");
 
         assertFalse(html.contains("@font-face"), "expected no @font-face rule when no brand font is bundled");
+    }
+
+    @Test
+    void emitsFontFaceRulesFromTheRealBundledFonts() {
+        HtmlDesignRenderer renderer = new HtmlDesignRenderer(new NoopStorageService(), new BrandFontRegistry());
+
+        String html = renderer.renderHtml(documentWithOneTextBox(), "");
+
+        assertTrue(html.contains("@font-face{font-family:\"Houschka Rounded\";font-weight:normal"),
+                "expected a normal-weight @font-face rule from the bundled fonts");
+        assertTrue(html.contains("@font-face{font-family:\"Houschka Rounded\";font-weight:bold"),
+                "expected a bold-weight @font-face rule from the bundled fonts");
     }
 
     @Test
@@ -80,7 +106,10 @@ class HtmlDesignRendererTest {
 
     @Test
     void quotesMultiWordFontFamilyNamesWithSingleQuotes() {
-        HtmlDesignRenderer renderer = new HtmlDesignRenderer(new NoopStorageService(), new BrandFontRegistry());
+        // Empty registry: the double-quote ban below is about inline style="..."
+        // attributes; a real registry legitimately double-quotes the family
+        // inside the <style> block's @font-face rule.
+        HtmlDesignRenderer renderer = new HtmlDesignRenderer(new NoopStorageService(), emptyRegistry());
 
         String html = renderer.renderHtml(documentWithOneTextBox(), "");
 

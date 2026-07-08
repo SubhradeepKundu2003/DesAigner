@@ -6,21 +6,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 /**
- * No {@code fonts/houschka-rounded-*.ttf} files exist in this repo yet (by
- * design — see TASKS.md / the TCS brand template plan), so constructing the
- * real registry against the real classpath exercises the actual, current
- * no-op path: nothing to register, nothing to embed, every renderer falls
- * back to its existing logical-font handling. Once the real files are added,
- * this test's assertions flip to "present" and should be updated then.
+ * The real Houschka Rounded Alt files now live at
+ * {@code src/main/resources/fonts/} (Medium = normal weight, DemiBold = bold),
+ * so constructing the registry against the real classpath exercises the
+ * loaded path: both weights present, registered with AWT, bytes available for
+ * the HTML {@code @font-face} and PDF {@code useFont} embedding.
  */
 class BrandFontRegistryTest {
 
     @Test
-    void noBundledFontFilesMeansBothWeightsAreAbsent() {
+    void bundledFontFilesLoadBothWeights() {
         BrandFontRegistry registry = new BrandFontRegistry();
 
-        assertTrue(registry.bytesFor("normal").isEmpty());
-        assertTrue(registry.bytesFor("bold").isEmpty());
+        assertTrue(registry.bytesFor("normal").isPresent());
+        assertTrue(registry.bytesFor("bold").isPresent());
+    }
+
+    @Test
+    void weightsAreDistinctFiles() {
+        BrandFontRegistry registry = new BrandFontRegistry();
+
+        assertTrue(registry.bytesFor("normal").get().length != registry.bytesFor("bold").get().length,
+                "normal and bold should come from different font files");
     }
 
     @Test

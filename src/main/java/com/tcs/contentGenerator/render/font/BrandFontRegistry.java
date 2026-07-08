@@ -7,6 +7,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -30,26 +31,33 @@ public class BrandFontRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(BrandFontRegistry.class);
     private static final String FAMILY = "Houschka Rounded";
-    private static final Map<String, String> CANDIDATE_FILES = Map.of(
-            "normal", "fonts/houschka-rounded-regular.ttf",
-            "bold", "fonts/houschka-rounded-bold.ttf");
+    private static final Map<String, List<String>> CANDIDATE_FILES = Map.of(
+            "normal", List.of(
+                    "fonts/houschka-rounded-regular.ttf",
+                    "fonts/HouschkaRoundedAlt-Medium.ttf"),
+            "bold", List.of(
+                    "fonts/houschka-rounded-bold.ttf",
+                    "fonts/HouschkaRoundedAlt-DemiBold.ttf"));
 
     private final Map<String, byte[]> bytesByWeight = new HashMap<>();
 
     public BrandFontRegistry() {
-        CANDIDATE_FILES.forEach((weight, path) -> {
-            ClassPathResource resource = new ClassPathResource(path);
-            if (!resource.exists()) {
-                return;
-            }
-            try (InputStream in = resource.getInputStream()) {
-                byte[] bytes = in.readAllBytes();
-                Font awtFont = Font.createFont(Font.TRUETYPE_FONT, new ByteArrayInputStream(bytes));
-                GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(awtFont);
-                bytesByWeight.put(weight, bytes);
-                log.info("Loaded brand font {} ({})", FAMILY, path);
-            } catch (IOException | FontFormatException e) {
-                log.warn("Could not load brand font {}; falling back to logical font family", path, e);
+        CANDIDATE_FILES.forEach((weight, candidates) -> {
+            for (String path : candidates) {
+                ClassPathResource resource = new ClassPathResource(path);
+                if (!resource.exists()) {
+                    continue;
+                }
+                try (InputStream in = resource.getInputStream()) {
+                    byte[] bytes = in.readAllBytes();
+                    Font awtFont = Font.createFont(Font.TRUETYPE_FONT, new ByteArrayInputStream(bytes));
+                    GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(awtFont);
+                    bytesByWeight.put(weight, bytes);
+                    log.info("Loaded brand font {} ({})", FAMILY, path);
+                    break;
+                } catch (IOException | FontFormatException e) {
+                    log.warn("Could not load brand font {}; falling back to logical font family", path, e);
+                }
             }
         });
     }

@@ -61,13 +61,14 @@ class LayoutEngineTest {
         GeneratedArticle hero = new GeneratedArticle("Leadership headline",
                 "A short leadership message body with a couple of sentences of prose.", null);
         SectionComposition heroSection = new SectionComposition(
-                NewsletterSection.LEADERSHIP_MESSAGE, SectionPattern.HERO, List.of(hero), "primary", null, null);
+                NewsletterSection.LEADERSHIP_MESSAGE, SectionPattern.HERO, List.of(hero), "primary", null,
+                null, null);
 
         GeneratedArticle stat = new GeneratedArticle("Delivery headline",
                 "Customer satisfaction keeps climbing this quarter.", null);
         SectionComposition statSection = new SectionComposition(
                 NewsletterSection.DELIVERY_HIGHLIGHTS, SectionPattern.STAT_CALLOUT, List.of(stat),
-                "primary", "72", "NPS score");
+                "primary", null, "72", "NPS score");
 
         GeneratedArticle standardA = new GeneratedArticle("Project headline one",
                 "The first project update body describing recent progress in a few sentences.", null);
@@ -75,7 +76,7 @@ class LayoutEngineTest {
                 "The second project update body describing a different milestone this month.", null);
         SectionComposition standardSection = new SectionComposition(
                 NewsletterSection.PROJECT_UPDATES, SectionPattern.STANDARD,
-                List.of(standardA, standardB), "secondary", null, null);
+                List.of(standardA, standardB), "secondary", null, null, null);
 
         GeneratedArticle colA = new GeneratedArticle("Customer story one",
                 "A short customer success story body for the first column.", null);
@@ -83,7 +84,7 @@ class LayoutEngineTest {
                 "A short customer success story body for the second column.", null);
         SectionComposition twoColumnSection = new SectionComposition(
                 NewsletterSection.CUSTOMER_SUCCESS, SectionPattern.TWO_COLUMN,
-                List.of(colA, colB), "secondary", null, null);
+                List.of(colA, colB), "secondary", null, null, null);
 
         GeneratedArticle eventA = new GeneratedArticle("Town hall",
                 "Join the quarterly town hall next week.", null);
@@ -91,7 +92,7 @@ class LayoutEngineTest {
                 "A hands-on training day for the whole team.", null);
         SectionComposition eventSection = new SectionComposition(
                 NewsletterSection.UPCOMING_EVENTS, SectionPattern.EVENT_LIST,
-                List.of(eventA, eventB), "secondary", null, null);
+                List.of(eventA, eventB), "secondary", null, null, null);
 
         return new CompositionPlan("test",
                 List.of(heroSection, statSection, standardSection, twoColumnSection, eventSection));
@@ -171,6 +172,27 @@ class LayoutEngineTest {
         assertTrue(Math.abs(logo.frame().y() - MARGIN) < EPSILON, "logo should start at the top margin");
         assertTrue(Math.abs(title.frame().y() - MARGIN) < EPSILON, "issue title should start at the top margin");
         assertTrue(logo.frame().x() < title.frame().x(), "logo should sit to the left of the issue title");
+    }
+
+    @Test
+    void sectionWithIconAssetGetsAnImageBoxIconInsteadOfTheDot() {
+        GeneratedArticle article = new GeneratedArticle("Delivery headline",
+                "A short body.", null);
+        SectionComposition section = new SectionComposition(
+                NewsletterSection.DELIVERY_HIGHLIGHTS, SectionPattern.STANDARD, List.of(article),
+                "primary", "icon-DELIVERY_HIGHLIGHTS", null, null);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), fixtureTemplate(), "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        ImageBox icon = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.SECTION_ICON)
+                .findFirst().orElseThrow(() -> new AssertionError("expected a SECTION_ICON ImageBox"));
+        assertTrue("icon-DELIVERY_HIGHLIGHTS".equals(icon.assetId()),
+                "icon ImageBox should reference the section's icon asset id");
+        assertTrue(all.stream().noneMatch(c -> c.role() == ComponentRole.SECTION_ICON && !(c instanceof ImageBox)),
+                "no dot ShapeBox expected when the section has an icon asset");
     }
 
     private static boolean overlaps(Frame a, Frame b) {
