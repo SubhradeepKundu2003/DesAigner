@@ -29,7 +29,8 @@ import tools.jackson.databind.json.JsonMapper;
 class StyleExtractionServiceTest {
 
     private static final ObjectMapper MAPPER = JsonMapper.builder().build();
-    private static final TemplateCatalog TEMPLATES = new TemplateCatalog(JsonMapper.builder().build());
+    private static final TemplateCatalog TEMPLATES =
+            new TemplateCatalog(JsonMapper.builder().build(), "tcs-brand");
 
     private static StyleDescription description(String name, String text, String primary) {
         return new StyleDescription(name, "#FFFFFF", "#F2F4F7", text, "#5F6B7A", primary,
