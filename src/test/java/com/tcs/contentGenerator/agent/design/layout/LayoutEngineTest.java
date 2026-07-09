@@ -201,9 +201,29 @@ class LayoutEngineTest {
         DesignTemplate plain = fixtureTemplate();
         return new DesignTemplate(plain.name(), plain.theme(), new com.tcs.contentGenerator.agent.design.Decor(
                 new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "wave"),
-                new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary"),
+                new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", false),
+                null, null,
                 new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true),
                 new com.tcs.contentGenerator.agent.design.Decor.StatCard("background", "primary", true),
+                new com.tcs.contentGenerator.agent.design.Decor.Footer("band", "primary", "secondary")));
+    }
+
+    /** Decor with every editorial-polish feature on, plus the optional editorial text styles. */
+    private static DesignTemplate editorialTemplate() {
+        DesignTemplate plain = fixtureTemplate();
+        java.util.Map<String, TextStyle> styles = new java.util.HashMap<>(plain.theme().textStyles());
+        styles.put("BodyLead", new TextStyle("SansSerif", 10.5, "normal", "muted", 13));
+        styles.put("SectionTitleKicker", new TextStyle("SansSerif", 11, "bold", "primary", 15));
+        Theme theme = new Theme(plain.theme().pageSize(),
+                new java.util.HashMap<>(plain.theme().colors()) {{ put("surface", "#eeeeee"); }},
+                styles, plain.theme().spacing());
+        return new DesignTemplate(plain.name(), theme, new com.tcs.contentGenerator.agent.design.Decor(
+                new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "flat"),
+                new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", true),
+                new com.tcs.contentGenerator.agent.design.Decor.Hero("surface", "primary"),
+                new com.tcs.contentGenerator.agent.design.Decor.SectionBand("surface"),
+                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true),
+                new com.tcs.contentGenerator.agent.design.Decor.StatCard("surface", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Footer("band", "primary", "secondary")));
     }
 
@@ -283,6 +303,92 @@ class LayoutEngineTest {
         assertTrue(icon.frame().x() >= chip.frame().x() - EPSILON
                         && icon.frame().x() + icon.frame().w() <= chip.frame().x() + chip.frame().w() + EPSILON,
                 "the icon must be horizontally centered inside the chip");
+    }
+
+    @Test
+    void heroPanelWrapsTheHeroHeadlineAndBody() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), editorialTemplate(), "Test Issue", "job-1");
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        ImageBox panel = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.assetId() != null && box.assetId().startsWith("decor-heropanel-"))
+                .findFirst().orElseThrow(() -> new AssertionError("expected a hero panel decoration"));
+        TextBox heroHeadline = all.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(box -> "HeroHeadline".equals(box.styleRef()))
+                .findFirst().orElseThrow();
+        Frame panelFrame = panel.frame();
+        Frame headFrame = heroHeadline.frame();
+        assertTrue(headFrame.x() >= panelFrame.x() && headFrame.y() >= panelFrame.y()
+                        && headFrame.x() + headFrame.w() <= panelFrame.x() + panelFrame.w() + EPSILON
+                        && headFrame.y() + headFrame.h() <= panelFrame.y() + panelFrame.h() + EPSILON,
+                "the hero headline must sit inside the panel");
+    }
+
+    @Test
+    void everyOtherSectionGetsAFullBleedTintBand() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), editorialTemplate(), "Test Issue", "job-1");
+        List<com.tcs.contentGenerator.design.ShapeBox> bands = document.pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(c -> c.role() == ComponentRole.DECORATION)
+                .filter(com.tcs.contentGenerator.design.ShapeBox.class::isInstance)
+                .map(com.tcs.contentGenerator.design.ShapeBox.class::cast)
+                .toList();
+        assertTrue(!bands.isEmpty(), "expected at least one section tint band (odd sections, same-page only)");
+        for (var band : bands) {
+            assertTrue(Math.abs(band.frame().x()) < EPSILON
+                            && Math.abs(band.frame().w() - PAGE_WIDTH) < EPSILON,
+                    "tint bands must be full-bleed");
+            assertTrue("surface".equals(band.fillColorRole()), "band uses the sectionBand fill role");
+        }
+    }
+
+    @Test
+    void kickerHeadersUppercaseTheTitleAndDropTheDividers() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), editorialTemplate(), "Test Issue", "job-1");
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        TextBox sectionTitle = all.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.SECTION_TITLE)
+                .findFirst().orElseThrow();
+        assertTrue(sectionTitle.text().equals(sectionTitle.text().toUpperCase(java.util.Locale.ROOT)),
+                "kicker titles are uppercase: " + sectionTitle.text());
+        assertTrue("SectionTitleKicker".equals(sectionTitle.styleRef()));
+        // accent bars exist (small DIVIDER-role rects), full-width divider rules do not
+        assertTrue(all.stream().anyMatch(c -> c.role() == ComponentRole.DIVIDER
+                        && c.frame().w() < 40), "expected kicker accent bars");
+        assertTrue(all.stream().noneMatch(c -> c.role() == ComponentRole.DIVIDER
+                        && c.frame().w() > 100), "full-width dividers must be gone in kicker mode");
+    }
+
+    @Test
+    void leadParagraphIsSplitOffWhenThemeDefinesBodyLead() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), editorialTemplate(), "Test Issue", "job-1");
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        // the fixture's standard-section bodies are single-paragraph, so use the hero:
+        // its body is one paragraph too — craft a two-paragraph article instead
+        GeneratedArticle article = new GeneratedArticle("Two paragraph article",
+                "The first paragraph acts as the lead.\n\nThe second paragraph is the body.", null);
+        SectionComposition section = new SectionComposition(NewsletterSection.PROJECT_UPDATES,
+                SectionPattern.STANDARD, List.of(article), "primary", null, null, null);
+        DesignDocument doc2 = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), editorialTemplate(), "Test Issue", "job-1");
+        List<Component> components = doc2.pages().stream().flatMap(p -> p.components().stream()).toList();
+        TextBox lead = components.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.ARTICLE_LEAD)
+                .findFirst().orElseThrow(() -> new AssertionError("expected an ARTICLE_LEAD box"));
+        assertTrue("BodyLead".equals(lead.styleRef()));
+        assertTrue(lead.text().contains("first paragraph"));
+        TextBox rest = components.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.ARTICLE_BODY)
+                .findFirst().orElseThrow();
+        assertTrue(rest.text().contains("second paragraph") && !rest.text().contains("first paragraph"));
+        // single-paragraph bodies in the same run stay unsplit
+        assertTrue(all.stream().filter(c -> c.role() == ComponentRole.ARTICLE_LEAD).count()
+                        <= all.stream().filter(c -> c.role() == ComponentRole.ARTICLE_BODY).count(),
+                "never more leads than bodies");
     }
 
     @Test

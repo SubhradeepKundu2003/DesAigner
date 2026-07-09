@@ -177,7 +177,11 @@ public class LayoutLint {
     }
 
     private static boolean sitsOnDecoration(TextBox box, List<Component> components) {
-        return components.stream().anyMatch(c -> c.role() == ComponentRole.DECORATION
+        // Only IMAGE decorations (bands/panels baked as pixels) blind the check.
+        // A DECORATION ShapeBox (e.g. a section tint band) names a theme color,
+        // so backgroundFillFor can judge contrast against it normally.
+        return components.stream().anyMatch(c -> c instanceof com.tcs.contentGenerator.design.ImageBox
+                && c.role() == ComponentRole.DECORATION
                 && overlaps(c.frame(), box.frame()));
     }
 

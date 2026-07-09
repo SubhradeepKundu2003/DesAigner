@@ -75,6 +75,26 @@ public class Paginator {
         pages.get(pages.size() - 1).add(component);
     }
 
+    /** Index of the page the cursor is currently on (0-based). */
+    public int pageIndex() {
+        return pages.size() - 1;
+    }
+
+    /** Number of components already placed on the current page. */
+    public int positionOnCurrentPage() {
+        return pages.get(pages.size() - 1).size();
+    }
+
+    /**
+     * Inserts a component at a recorded position on a specific page — used for
+     * backdrops whose extent is only known after their content is laid out
+     * (e.g. a section tint band): inserting at the position captured before the
+     * section keeps the backdrop painting beneath it (paint order = list order).
+     */
+    public void insertOnPage(int pageIndex, int position, Component component) {
+        pages.get(pageIndex).add(position, component);
+    }
+
     public String nextId() {
         return "cmp-" + idSeq.incrementAndGet();
     }

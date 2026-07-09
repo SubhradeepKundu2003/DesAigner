@@ -204,6 +204,22 @@ public class StyleExtractionService {
             textStyles.put("IssueTitleOnBand", new TextStyle(issueTitle.fontFamily(),
                     issueTitle.fontSizePt(), issueTitle.fontWeight(), onBandRole, issueTitle.lineHeightPt()));
         }
+        // editorial styles: a larger muted lead paragraph, and a colored kicker
+        // section title — colored only if the brand color clears the contrast
+        // gate on the page background (the TCS-Blue-on-white trap, again)
+        TextStyle body = textStyles.get("Body");
+        if (body != null) {
+            textStyles.put("BodyLead", new TextStyle(body.fontFamily(), body.fontSizePt() + 1.5,
+                    body.fontWeight(), "muted", body.lineHeightPt() + 2));
+        }
+        TextStyle sectionTitle = textStyles.get("SectionTitle");
+        if (sectionTitle != null) {
+            String kickerRole = contrastRatio(colors.get("primary"), background) >= MIN_TEXT_CONTRAST
+                    ? "primary" : "text";
+            textStyles.put("SectionTitleKicker", new TextStyle(sectionTitle.fontFamily(),
+                    sectionTitle.fontSizePt(), sectionTitle.fontWeight(), kickerRole,
+                    sectionTitle.lineHeightPt()));
+        }
 
         boolean shadows = "yes".equalsIgnoreCase(strip(description.shadows()));
         String photoClip = switch (strip(description.photoShape()).toLowerCase(Locale.ROOT)) {
@@ -214,7 +230,9 @@ public class StyleExtractionService {
         Decor decor = new Decor(
                 new Decor.Masthead("gradient-band", mastheadFromRole, mastheadToRole, 0, 130,
                         "wave".equalsIgnoreCase(strip(description.mastheadEdge())) ? "wave" : "flat"),
-                new Decor.SectionHeader("chip", "primary"),
+                new Decor.SectionHeader("chip", "primary", true),
+                new Decor.Hero("surface", "primary"),
+                new Decor.SectionBand("surface"),
                 new Decor.Photo(photoClip, 12, shadows),
                 new Decor.StatCard("surface", "primary", shadows),
                 new Decor.Footer("band", mastheadFromRole, mastheadToRole));

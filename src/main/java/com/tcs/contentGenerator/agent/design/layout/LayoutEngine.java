@@ -62,6 +62,15 @@ public class LayoutEngine {
     private static final double FOOTER_HEIGHT = 8;
     /** Title style used on a masthead band when the theme defines it. */
     private static final String ON_BAND_TITLE_STYLE = "IssueTitleOnBand";
+    /** Optional editorial styles — used only when the theme defines them. */
+    private static final String LEAD_STYLE = "BodyLead";
+    private static final String KICKER_TITLE_STYLE = "SectionTitleKicker";
+    private static final double HERO_PADDING = 14;
+    private static final double KICKER_BAR_WIDTH = 28;
+    private static final double KICKER_BAR_HEIGHT = 4;
+    private static final double KICKER_BAR_GAP = 6;
+    /** Vertical breathing room a section tint band adds above/below its section. */
+    private static final double BAND_BLEED = 10;
 
     private final TextMeasurer measurer = new TextMeasurer();
 
@@ -73,16 +82,31 @@ public class LayoutEngine {
         placeMasthead(p, theme, decor, issueTitle);
         p.advance(SECTION_GAP);
 
+        boolean kicker = decor != null && decor.sectionHeader() != null && decor.sectionHeader().kicker();
         List<SectionComposition> sections = plan.sections();
         for (int i = 0; i < sections.size(); i++) {
             SectionComposition section = sections.get(i);
-            if (i > 0) {
+            if (i > 0 && !kicker) {
+                // kicker headers carry their own accent bar — the divider would double up
                 placeDivider(p, theme);
                 p.advance(PARAGRAPH_GAP);
             }
+            boolean banded = decor != null && decor.sectionBand() != null && i % 2 == 1;
+            int bandPage = p.pageIndex();
+            int bandPosition = p.positionOnCurrentPage();
+            double bandTop = p.y() - BAND_BLEED;
             placeSectionHeader(p, section, theme, decor);
             p.advance(PARAGRAPH_GAP);
             layoutSection(p, section, theme, decor);
+            if (banded && p.pageIndex() == bandPage) {
+                // full-bleed tint behind the whole section; a ShapeBox (not a baked
+                // image) so the contrast lint can still judge text on it. Sections
+                // that crossed a page break simply skip their band.
+                p.insertOnPage(bandPage, bandPosition, new ShapeBox(p.nextId(), ComponentRole.DECORATION,
+                        new Frame(0, Math.max(0, bandTop), theme.pageSize().widthPt(),
+                                p.y() + BAND_BLEED - Math.max(0, bandTop)),
+                        0, true, null, "rect", decor.sectionBand().fill()));
+            }
             p.advance(SECTION_GAP);
         }
 
@@ -95,7 +119,7 @@ public class LayoutEngine {
 
     private void layoutSection(Paginator p, SectionComposition section, Theme theme, Decor decor) {
         switch (section.pattern()) {
-            case HERO -> layoutHero(p, section, theme);
+            case HERO -> layoutHero(p, section, theme, decor);
             case STAT_CALLOUT -> layoutStatCallout(p, section, theme, decor);
             case EVENT_LIST -> layoutEventList(p, section, theme);
             case TWO_COLUMN -> layoutTwoColumn(p, section, theme);
@@ -120,7 +144,6 @@ public class LayoutEngine {
 
     private void layoutStandard(Paginator p, SectionComposition section, Theme theme) {
         TextStyle headStyle = styleOf(theme, "Headline");
-        TextStyle bodyStyle = styleOf(theme, "Body");
         List<GeneratedArticle> articles = section.articles();
         for (int i = 0; i < articles.size(); i++) {
             GeneratedArticle article = articles.get(i);
@@ -128,25 +151,98 @@ public class LayoutEngine {
             placeText(p, ComponentRole.ARTICLE_HEADLINE, "Headline", headStyle,
                     article.headline(), link, p.contentWidth());
             p.advance(PARAGRAPH_GAP);
-            placeText(p, ComponentRole.ARTICLE_BODY, "Body", bodyStyle,
-                    article.body(), link, p.contentWidth());
+            placeArticleBody(p, article.body(), link, p.contentWidth(), theme);
             if (i < articles.size() - 1) {
                 p.advance(ITEM_GAP);
             }
         }
     }
 
-    private void layoutHero(Paginator p, SectionComposition section, Theme theme) {
+    private void layoutHero(Paginator p, SectionComposition section, Theme theme, Decor decor) {
         if (section.articles().isEmpty()) {
             return;
         }
         GeneratedArticle article = section.articles().get(0);
         SourceLink link = new SourceLink(section.section().title(), article.headline());
-        placeText(p, ComponentRole.ARTICLE_HEADLINE, "HeroHeadline", styleOf(theme, "HeroHeadline"),
-                article.headline(), link, p.contentWidth());
-        p.advance(PARAGRAPH_GAP);
+        if (decor == null || decor.hero() == null) {
+            placeText(p, ComponentRole.ARTICLE_HEADLINE, "HeroHeadline", styleOf(theme, "HeroHeadline"),
+                    article.headline(), link, p.contentWidth());
+            p.advance(PARAGRAPH_GAP);
+            placeArticleBody(p, article.body(), link, p.contentWidth(), theme);
+            return;
+        }
+
+        // hero panel: measure everything at the inset width, reserve the whole
+        // block at once, paint the panel first, then the texts on top of it
+        double innerWidth = p.contentWidth() - 2 * HERO_PADDING;
+        TextStyle headStyle = styleOf(theme, "HeroHeadline");
+        double headHeight = measurer.heightOf(article.headline(), headStyle, innerWidth);
+        BodySplit body = splitBody(article.body(), theme);
+        double bodyHeight = body.height(measurer, theme, innerWidth);
+        double total = p.reserve(headHeight + PARAGRAPH_GAP + bodyHeight + 2 * HERO_PADDING,
+                "hero-panel:" + article.headline());
+        double y = p.y();
+        String id = p.nextId();
+        p.add(new ImageBox(id, ComponentRole.DECORATION, new Frame(p.x(), y, p.contentWidth(), total),
+                0, true, null, DECOR_ASSET_PREFIX + "heropanel-" + id, "hero panel"));
+        double textY = y + HERO_PADDING;
+        addTextAt(p, p.x() + HERO_PADDING, textY, innerWidth, headHeight,
+                ComponentRole.ARTICLE_HEADLINE, "HeroHeadline", article.headline(), link);
+        textY += headHeight + PARAGRAPH_GAP;
+        textY = body.place(this, p, p.x() + HERO_PADDING, textY, innerWidth, theme, link);
+        p.advance(total);
+    }
+
+    /**
+     * Places an article body, splitting off the first paragraph as an editorial
+     * lead (larger, muted {@code BodyLead} style, role {@code ARTICLE_LEAD})
+     * when the theme defines that style and the body has more than one
+     * paragraph — otherwise exactly the old single-box behavior.
+     */
+    private void placeArticleBody(Paginator p, String text, SourceLink link, double width, Theme theme) {
+        BodySplit split = splitBody(text, theme);
+        if (split.lead() != null) {
+            placeText(p, ComponentRole.ARTICLE_LEAD, LEAD_STYLE, styleOf(theme, LEAD_STYLE),
+                    split.lead(), link, width);
+            p.advance(PARAGRAPH_GAP);
+        }
         placeText(p, ComponentRole.ARTICLE_BODY, "Body", styleOf(theme, "Body"),
-                article.body(), link, p.contentWidth());
+                split.rest(), link, width);
+    }
+
+    private static BodySplit splitBody(String text, Theme theme) {
+        if (!theme.textStyles().containsKey(LEAD_STYLE)) {
+            return new BodySplit(null, text);
+        }
+        String[] parts = text.split("\n\n", 2);
+        if (parts.length < 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            return new BodySplit(null, text);
+        }
+        return new BodySplit(parts[0].strip(), parts[1].strip());
+    }
+
+    /** An article body after the optional lead-paragraph split. */
+    private record BodySplit(String lead, String rest) {
+
+        double height(TextMeasurer measurer, Theme theme, double width) {
+            double rest = measurer.heightOf(rest(), styleOf(theme, "Body"), width);
+            return lead() == null ? rest
+                    : measurer.heightOf(lead(), styleOf(theme, LEAD_STYLE), width) + PARAGRAPH_GAP + rest;
+        }
+
+        /** Places the (lead +) body at explicit coordinates; returns the y below the last box. */
+        double place(LayoutEngine engine, Paginator p, double x, double y, double width,
+                Theme theme, SourceLink link) {
+            if (lead() != null) {
+                double leadHeight = engine.measurer.heightOf(lead(), styleOf(theme, LEAD_STYLE), width);
+                engine.addTextAt(p, x, y, width, leadHeight, ComponentRole.ARTICLE_LEAD, LEAD_STYLE,
+                        lead(), link);
+                y += leadHeight + PARAGRAPH_GAP;
+            }
+            double restHeight = engine.measurer.heightOf(rest(), styleOf(theme, "Body"), width);
+            engine.addTextAt(p, x, y, width, restHeight, ComponentRole.ARTICLE_BODY, "Body", rest(), link);
+            return y + restHeight;
+        }
     }
 
     private void layoutEventList(Paginator p, SectionComposition section, Theme theme) {
@@ -199,8 +295,7 @@ public class LayoutEngine {
         p.advance(total);
         p.advance(PARAGRAPH_GAP);
 
-        placeText(p, ComponentRole.ARTICLE_BODY, "Body", styleOf(theme, "Body"),
-                article.body(), link, p.contentWidth());
+        placeArticleBody(p, article.body(), link, p.contentWidth(), theme);
     }
 
     private void layoutTwoColumn(Paginator p, SectionComposition section, Theme theme) {
@@ -270,15 +365,31 @@ public class LayoutEngine {
     }
 
     private void placeSectionHeader(Paginator p, SectionComposition section, Theme theme, Decor decor) {
-        TextStyle style = styleOf(theme, "SectionTitle");
         boolean hasIconAsset = section.iconAssetId() != null;
         boolean chip = decor != null && decor.sectionHeader() != null
-                && "chip".equals(decor.sectionHeader().style());
+                && decor.sectionHeader().style() != null
+                && decor.sectionHeader().style().startsWith("chip");
+        boolean kicker = decor != null && decor.sectionHeader() != null && decor.sectionHeader().kicker();
+        String titleStyleRef = kicker && theme.textStyles().containsKey(KICKER_TITLE_STYLE)
+                ? KICKER_TITLE_STYLE : "SectionTitle";
+        TextStyle style = styleOf(theme, titleStyleRef);
+        String title = kicker
+                ? section.section().title().toUpperCase(java.util.Locale.ROOT)
+                : section.section().title();
         double iconSize = hasIconAsset ? ICON_IMAGE_SIZE : ICON_SIZE;
         double leadSize = chip ? CHIP_SIZE : iconSize;
+        double barBlock = kicker ? KICKER_BAR_HEIGHT + KICKER_BAR_GAP : 0;
         double textWidth = p.contentWidth() - leadSize - ICON_GAP;
-        double textHeight = measurer.heightOf(section.section().title(), style, textWidth);
-        double h = p.reserve(Math.max(textHeight, leadSize), "section-title:" + section.section().title());
+        double textHeight = measurer.heightOf(title, style, textWidth);
+        // reserve bar + header row together so a page break can't split them
+        double h = p.reserve(barBlock + Math.max(textHeight, leadSize),
+                "section-title:" + section.section().title()) - barBlock;
+        if (kicker) {
+            p.add(new ShapeBox(p.nextId(), ComponentRole.DIVIDER,
+                    new Frame(p.x(), p.y(), KICKER_BAR_WIDTH, KICKER_BAR_HEIGHT),
+                    0, false, null, "rect", decor.sectionHeader().colorRole()));
+            p.advance(barBlock);
+        }
         double y = p.y();
         if (chip) {
             String id = p.nextId();
@@ -296,7 +407,7 @@ public class LayoutEngine {
         }
         p.add(new TextBox(p.nextId(), ComponentRole.SECTION_TITLE,
                 new Frame(p.x() + leadSize + ICON_GAP, y, textWidth, h), 0, false, null,
-                "SectionTitle", section.section().title()));
+                titleStyleRef, title));
         p.advance(h);
     }
 

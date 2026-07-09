@@ -1063,35 +1063,70 @@ findings**, PDF visually confirmed — white title readable across the whole
 gold→dark wave band, gold chips, dark stat card with gold accent, rounded
 photo, gold footer. Suite **100/100 tests green.**
 
-**Proposed 2026-07-09, discussed with user, NOT yet approved — "editorial
-polish" package** (user's feedback: below the masthead the content zone is
-still a plain text wall): (a) hero panel behind the Leadership Message
-(tinted full-width surface card, optional quote glyph); (b) alternating
-subtle `surface` tint bands behind every other section; (c) stronger
-section headers (uppercase colored kicker label + thicker accent bar
-replacing the thin divider); (d) lead-paragraph typography (first
-paragraph of each article larger/muted). All four are decor/template
-extensions on the proven asset-baking machinery. Then as a bigger
-follow-up: card-grid layout for multi-article sections, image-left/right
-alternation (finally touches `LayoutEngine` patterns — reserves image
-space instead of scavenging gaps), LLM-chosen pull quotes (content choice
-only, geometry stays Java), multi-KPI tile rows. Also noted: source-doc
-image relevance ranking (vision description + embeddings) instead of
-first-unused; and an upload endpoint for references so extraction can be
-triggered without shell access.
+**Editorial polish package DONE (2026-07-09, user-approved): built,
+unit-tested, verified live e2e on tcs-brand and nocturnal-corporate**
+(user's feedback that triggered it: below the masthead the content zone
+was still a plain text wall). All four pieces landed:
+- **(a) Hero panel**: HERO sections wrap in a rounded tinted panel
+  (`Decor.Hero(fill, accent)`) with a large translucent quote glyph —
+  `DecorPainter.heroPanel` uses SVG `<text>` with generic
+  `Georgia, serif` only (no concrete font dependency; Batik rasterization
+  test guards it). `LayoutEngine.layoutHero` measures headline+body at the
+  inset width, reserves the whole block, paints the panel first
+  (`decor-heropanel-*`), places texts on top.
+- **(b) Alternating section tint bands**: odd-indexed sections get a
+  full-bleed band (`Decor.SectionBand(fill)`) — deliberately a
+  **`ShapeBox` with role DECORATION, not a baked image**, so the contrast
+  lint can still judge text on it via `backgroundFillFor` (and
+  `sitsOnDecoration` was narrowed to ImageBox-only for exactly this
+  reason). Extent is only known post-layout, so `Paginator` gained
+  `pageIndex()/positionOnCurrentPage()/insertOnPage(...)` and the band is
+  inserted at the position captured before the section (paint order =
+  list order). Sections that cross a page break skip their band (v1).
+- **(c) Kicker headers**: `Decor.SectionHeader` gained `kicker` — a short
+  accent bar (28×4pt ShapeBox, DIVIDER role) above each header, section
+  title UPPERCASE in the optional `SectionTitleKicker` style, and the
+  full-width inter-section dividers dropped (the bar replaces them). Bar +
+  header row reserved together so a page break can't split them. Kicker
+  title color per template: colored only where it clears 4.5:1 on the
+  page background (tcs-brand → `text`, dark templates → `primary` gold).
+- **(d) Lead paragraphs**: when a theme defines `BodyLead`, the first
+  paragraph of multi-paragraph article bodies splits into its own TextBox
+  (new role **`ARTICLE_LEAD`**, larger + muted) — hero, standard, and
+  stat-callout bodies all go through the shared `placeArticleBody`/
+  `BodySplit`; single-paragraph bodies and TWO_COLUMN stay unsplit.
+  Note: review's editorial LLM pass targets ARTICLE_BODY, so leads aren't
+  separately fact/grammar-checked (they're the same text, just re-styled).
+- Templates: all three decorated templates gained `hero`, `sectionBand`,
+  `kicker: true`, `BodyLead`, `SectionTitleKicker`; style extraction emits
+  all of it for future learned templates (kicker color contrast-guarded).
+  td-classic untouched (baseline).
+- Suite **105/105**; live e2e both templates: review 100/100, 0 layout
+  findings; PDFs visually confirmed (hero panel + quote glyph, tint band,
+  kicker bars, uppercase titles, muted leads).
+
+**Bigger follow-up still open (discussed, not started):** card-grid layout
+for multi-article sections, image-left/right alternation (touches
+`LayoutEngine` patterns — reserves image space instead of scavenging
+gaps), LLM-chosen pull quotes (content choice only, geometry stays Java),
+multi-KPI tile rows. Also noted: source-doc image relevance ranking
+(vision description + embeddings) instead of first-unused; and an upload
+endpoint for references so extraction can be triggered without shell
+access.
 
 **Current next-step queue:** (1) per-section brand images
 (`storage/assets/<SECTION_NAME>/` — photos get the full crop/clip/shadow
-treatment automatically); (2) editorial-polish package above (pending user
-approval); (3) template-selection UX (per-run choice via API/UI — today
-the default is a config flip; also consider white section-icon variants so
-dark templates get real icons); (4) deeper reference learning
-(layout/component patterns into a persistent Design Knowledge Base — the
-ARCHITECTURE.md Pipeline 1 work; extraction now covers
-palette+typography+decor); (5) Phase 4 Angular editor (user asked about
-Figma-like feasibility 2026-07-09 — confirmed feasible, Canva-style
-single-user scope, backend contract ready); (6) Phase 5 hardening; (7)
-Agents #1–#5 unit tests; (8) design API asset serve/upload endpoints.
+treatment automatically); (2) layout-pattern follow-up (card grid,
+image-left/right, pull quotes, KPI tiles — see "bigger follow-up" above);
+(3) template-selection UX (per-run choice via API/UI — today the default
+is a config flip; also consider white section-icon variants so dark
+templates get real icons); (4) deeper reference learning (layout/component
+patterns into a persistent Design Knowledge Base — the ARCHITECTURE.md
+Pipeline 1 work; extraction now covers palette+typography+decor); (5)
+Phase 4 Angular editor (user asked about Figma-like feasibility
+2026-07-09 — confirmed feasible, Canva-style single-user scope, backend
+contract ready); (6) Phase 5 hardening; (7) Agents #1–#5 unit tests; (8)
+design API asset serve/upload endpoints.
 
 ### Design Intelligence Platform vision v2 (refined 2026-07-05 — incorporates specialized repositories, feedback loop, versioning, constraints, pattern learning/selection split; refines `ARCHITECTURE.md`, **NOT YET APPROVED, user is verifying before any code or `ARCHITECTURE.md` changes**)
 

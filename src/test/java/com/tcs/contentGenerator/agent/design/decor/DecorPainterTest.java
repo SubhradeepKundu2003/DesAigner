@@ -55,7 +55,7 @@ class DecorPainterTest {
 
     @Test
     void chipStatCardAndFooterAllRasterize() throws Exception {
-        rasterize(DecorPainter.chip(new Decor.SectionHeader("chip", "primary"), THEME, 20, 20));
+        rasterize(DecorPainter.chip(new Decor.SectionHeader("chip", "primary", false), THEME, 20, 20));
         String card = DecorPainter.statCard(new Decor.StatCard("surface", "secondary", true), THEME, 500, 60);
         assertTrue(card.contains("feGaussianBlur"), "shadowed card must carry the blur filter");
         rasterize(card);
@@ -63,8 +63,17 @@ class DecorPainterTest {
     }
 
     @Test
+    void heroPanelWithQuoteGlyphRasterizes() throws Exception {
+        String svg = DecorPainter.heroPanel(new Decor.Hero("surface", "primary"), THEME, 500, 160);
+        assertTrue(svg.contains("<text"), "hero panel carries the quote glyph");
+        assertTrue(svg.contains("#EBEBEB") && svg.contains("#4E84C4"), "resolved fill + accent colors");
+        BufferedImage image = rasterize(svg);
+        assertEquals(500, image.getWidth());
+    }
+
+    @Test
     void unknownColorRoleFallsBackInsteadOfEmittingNull() throws Exception {
-        String svg = DecorPainter.chip(new Decor.SectionHeader("chip", "no-such-role"), THEME, 20, 20);
+        String svg = DecorPainter.chip(new Decor.SectionHeader("chip", "no-such-role", false), THEME, 20, 20);
         assertTrue(svg.contains("#888888"), "unknown roles must fall back to the neutral gray");
         rasterize(svg);
     }

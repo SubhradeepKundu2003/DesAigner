@@ -78,6 +78,20 @@
         "fontWeight" : "bold",
         "colorRole" : "text",
         "lineHeightPt" : 20.0
+      },
+      "BodyLead" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 11.5,
+        "fontWeight" : "normal",
+        "colorRole" : "muted",
+        "lineHeightPt" : 16.0
+      },
+      "SectionTitleKicker" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 15.0,
+        "fontWeight" : "bold",
+        "colorRole" : "primary",
+        "lineHeightPt" : 19.0
       }
     },
     "spacing" : {
@@ -96,7 +110,15 @@
     },
     "sectionHeader" : {
       "style" : "chip",
-      "colorRole" : "primary"
+      "colorRole" : "primary",
+      "kicker" : true
+    },
+    "hero" : {
+      "fill" : "surface",
+      "accent" : "primary"
+    },
+    "sectionBand" : {
+      "fill" : "surface"
     },
     "photo" : {
       "clip" : "rounded",

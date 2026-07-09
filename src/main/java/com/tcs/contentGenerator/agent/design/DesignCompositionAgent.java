@@ -194,6 +194,8 @@ public class DesignCompositionAgent implements Agent {
                 String svg = switch (kind) {
                     case "masthead" -> DecorPainter.masthead(decor.masthead(), template.theme(),
                             box.frame().w(), box.frame().h());
+                    case "heropanel" -> DecorPainter.heroPanel(decor.hero(), template.theme(),
+                            box.frame().w(), box.frame().h());
                     case "chip" -> DecorPainter.chip(decor.sectionHeader(), template.theme(),
                             box.frame().w(), box.frame().h());
                     case "statcard" -> DecorPainter.statCard(decor.statCard(), template.theme(),

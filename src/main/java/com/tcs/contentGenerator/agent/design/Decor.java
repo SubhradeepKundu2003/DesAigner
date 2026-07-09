@@ -12,8 +12,8 @@ package com.tcs.contentGenerator.agent.design;
  * PPTX writer has no gradient/shadow API and openhtmltopdf has no
  * box-shadow/clip — the renderers stay unchanged.
  */
-public record Decor(Masthead masthead, SectionHeader sectionHeader, Photo photo,
-        StatCard statCard, Footer footer) {
+public record Decor(Masthead masthead, SectionHeader sectionHeader, Hero hero,
+        SectionBand sectionBand, Photo photo, StatCard statCard, Footer footer) {
 
     /**
      * Full-bleed gradient band behind the logo + issue title. {@code angle} 0 =
@@ -24,8 +24,29 @@ public record Decor(Masthead masthead, SectionHeader sectionHeader, Photo photo,
     public record Masthead(String style, String from, String to, int angle, double heightPt, String edge) {
     }
 
-    /** "chip" draws a soft rounded tint behind each section's icon/dot. */
-    public record SectionHeader(String style, String colorRole) {
+    /**
+     * "chip" draws a soft rounded tint behind each section's icon/dot.
+     * {@code kicker} additionally replaces the thin inter-section divider with
+     * a short accent bar above each header and renders the section title
+     * UPPERCASE (in the theme's {@code SectionTitleKicker} style if defined).
+     */
+    public record SectionHeader(String style, String colorRole, boolean kicker) {
+    }
+
+    /**
+     * Rounded tinted panel behind the whole HERO section (Leadership Message),
+     * with a large translucent quote glyph in the {@code accent} color.
+     */
+    public record Hero(String fill, String accent) {
+    }
+
+    /**
+     * Full-bleed tint band behind every other section — placed as a
+     * {@code ShapeBox} (not a baked image) so the review agent's contrast
+     * lint can still reason about text on it. Sections that cross a page
+     * break skip their band (v1 trade-off).
+     */
+    public record SectionBand(String fill) {
     }
 
     /**

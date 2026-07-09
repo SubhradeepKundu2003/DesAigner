@@ -11,6 +11,8 @@ public enum ComponentRole {
     SECTION_ICON,
     DIVIDER,
     ARTICLE_HEADLINE,
+    /** Larger, muted first paragraph of an article (editorial lead) — split off by the layout engine. */
+    ARTICLE_LEAD,
     ARTICLE_BODY,
     STAT_VALUE,
     STAT_LABEL,

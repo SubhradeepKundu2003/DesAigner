@@ -53,6 +53,24 @@ public final class DecorPainter {
                         .formatted(fmt(inset), fmt(inset), fmt(cardH), accent));
     }
 
+    /**
+     * Rounded tinted panel behind the hero section, with a large translucent
+     * quote glyph. The glyph is SVG {@code <text>} with generic serif families
+     * only — no concrete font dependency, and the Batik rasterization test
+     * guards that it renders.
+     */
+    public static String heroPanel(Decor.Hero spec, Theme theme, double w, double h) {
+        String fill = color(theme, spec.fill());
+        String accent = color(theme, spec.accent());
+        double glyphSize = Math.min(96, h * 0.6);
+        return svg(w, h,
+                "<rect x=\"0\" y=\"0\" width=\"%s\" height=\"%s\" rx=\"10\" fill=\"%s\"/>"
+                        .formatted(fmt(w), fmt(h), fill)
+                + ("<text x=\"%s\" y=\"%s\" font-family=\"Georgia, serif\" font-size=\"%s\" "
+                        + "font-weight=\"bold\" fill=\"%s\" fill-opacity=\"0.22\">“</text>")
+                        .formatted(fmt(w - glyphSize * 0.75), fmt(glyphSize * 0.85), fmt(glyphSize), accent));
+    }
+
     /** Thin gradient strip along the bottom page edge. */
     public static String footer(Decor.Footer spec, Theme theme, double w, double h) {
         return svg(w, h, gradientDef(color(theme, spec.from()), color(theme, spec.to()), 0)
