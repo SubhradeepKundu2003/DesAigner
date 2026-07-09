@@ -22,7 +22,8 @@ import tools.jackson.databind.json.JsonMapper;
  */
 class TemplateCatalogTest {
 
-    private static final Set<String> ALL_TEMPLATES = Set.of("tcs-brand", "td-classic", "noir-luxe");
+    private static final Set<String> ALL_TEMPLATES =
+            Set.of("tcs-brand", "td-classic", "noir-luxe", "nocturnal-corporate");
     private static final Set<String> REQUIRED_TEXT_STYLES = Set.of(
             "IssueTitle", "SectionTitle", "HeroHeadline", "Headline",
             "Body", "Stat", "StatLabel", "EventItem");

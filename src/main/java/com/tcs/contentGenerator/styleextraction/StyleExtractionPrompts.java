@@ -8,14 +8,14 @@ import java.util.List;
  * small local model breaks — same lesson as content generation); only the final
  * text-only merge call asks for structured JSON. Style only, never geometry:
  * the "LLM never produces coordinates" rule is locked — layout stays
- * deterministic Java, informed by the extracted theme.
+ * deterministic Java, informed by the extracted theme and decor.
  */
 final class StyleExtractionPrompts {
 
     static final String SYSTEM = """
             You are a senior brand designer analyzing reference newsletter designs to \
-            distill their visual style. You describe style — colors, typography mood, \
-            iconography, layout mood — never measurements, coordinates, or sizes.""";
+            distill their visual style. You describe style - colors, typography mood, \
+            iconography, decoration, layout mood - never measurements, coordinates, or sizes.""";
 
     private StyleExtractionPrompts() {
     }
@@ -24,9 +24,14 @@ final class StyleExtractionPrompts {
         return """
                 This image is %s of a reference newsletter design.
 
-                Describe its visual style in under 150 words of plain text (no JSON, no markdown):
+                Describe its visual style in under 200 words of plain text (no JSON, no markdown):
                 - Color palette: the page background color, main text color, and up to three \
                 brand/accent colors, each as an approximate hex value like #1A73E8.
+                - Header/masthead treatment: is there a colored banner or band at the top? Its \
+                colors (hex), whether it uses a gradient, and whether its edge is straight or \
+                wavy/curved.
+                - Image treatment: are photos straight-edged, rounded-corner, or oval/circular? \
+                Do images or cards have drop shadows or other depth effects?
                 - Typography mood (e.g. rounded and friendly, corporate serif, modern geometric).
                 - Iconography / graphic style, if any icons or illustrations are visible.
                 - Layout mood (e.g. dense and editorial, airy single-column, card-based).""".formatted(label);
@@ -44,14 +49,22 @@ final class StyleExtractionPrompts {
 
                 Every color field must be one six-digit hex value like #1A73E8, chosen from or \
                 harmonized with the colors observed in the notes:
-                - background: the page background (usually white or near-white)
+                - background: the page background (light or dark, follow the references)
                 - surface: a subtle tint for boxes/cards, close to the background
                 - text: the main body text color (must read clearly on the background)
                 - muted: a softer secondary text color
                 - primary: the dominant brand color
                 - secondary: a supporting brand color
                 - accent: a highlight color used sparingly
-                - divider: a light rule/line color
+                - divider: a subtle rule/line color
+                - mastheadFrom and mastheadTo: the two hex colors of the top banner/masthead \
+                gradient the references use (if the references show no banner, reuse the primary \
+                color for both)
+
+                mastheadEdge is "wave" if the references use curved/wavy shapes or flowing lines, \
+                else "flat". photoShape is "ellipse" if images appear oval/circular, "rounded" if \
+                they have rounded corners, else "square". shadows is "yes" if images or cards show \
+                drop shadows or depth, else "no".
 
                 templateName is a short lowercase name for this style (e.g. "ocean-corporate"). \
                 fontFamily is the single font family name that best matches the typography mood. \
@@ -63,7 +76,9 @@ final class StyleExtractionPrompts {
                 {"templateName": "ocean-corporate", "background": "#FFFFFF", "surface": "#F2F4F7", \
                 "text": "#1A1A1A", "muted": "#5F6B7A", "primary": "#1A73E8", "secondary": "#FBB034", \
                 "accent": "#54B948", "divider": "#E1E4E8", "fontFamily": "Avenir Next", \
-                "typographyMood": "...", "iconographyStyle": "...", "layoutMood": "...", "summary": "..."}
+                "typographyMood": "...", "iconographyStyle": "...", "layoutMood": "...", \
+                "mastheadFrom": "#1A73E8", "mastheadTo": "#0B2545", "mastheadEdge": "wave", \
+                "photoShape": "rounded", "shadows": "yes", "summary": "..."}
 
                 Style notes:
 

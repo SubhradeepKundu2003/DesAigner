@@ -127,6 +127,31 @@ class ReviewAgentTest {
     }
 
     @Test
+    void textSittingOnADecorationIsExemptFromTheContrastLint() {
+        // "Band" style is white-on-white against the PAGE — a guaranteed contrast
+        // failure — but a DECORATION band sits behind it, whose pixel fill the
+        // lint cannot judge, so the check must skip this box entirely.
+        Theme bandTheme = new Theme(THEME.pageSize(), THEME.colors(),
+                Map.of("Band", new TextStyle("SansSerif", 10, "bold", "background", 12)),
+                THEME.spacing());
+        com.tcs.contentGenerator.design.ImageBox band = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-1", ComponentRole.DECORATION, new Frame(0, 0, 300, 80), 0, true,
+                null, "decor-masthead-cmp-1", "masthead band");
+        TextBox title = new TextBox("cmp-2", ComponentRole.ISSUE_TITLE, new Frame(20, 20, 260, 40), 1, false,
+                null, "Band", "White title on the band");
+        PipelineContext context = new PipelineContext("job-1", List.of());
+        context.setDesignDocument(new DesignDocument(1, 1, new DesignMeta("Issue", "job-1"), bandTheme,
+                List.of(), List.of(new Page("page-1", List.of(band, title)))));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                        .noneMatch(f -> f.category().equals("LOW_CONTRAST")),
+                "text over a decoration must not be contrast-checked, got "
+                        + context.getReviewReport().findings());
+    }
+
+    @Test
     void trailingFooterDecorationDoesNotHideAnOrphanedHeader() {
         TextBox orphan = new TextBox("cmp-1", ComponentRole.SECTION_TITLE, new Frame(20, 370, 200, 16), 0, false,
                 null, "Body", "Orphaned section title");

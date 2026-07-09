@@ -1022,15 +1022,57 @@ still deterministic Java, LLM still never touches geometry.
   Fact-validation HIGH flags blocked export on one run (normal variance)
   — resolved via the flags API, then exported.
 
+**Decor-aware style extraction DONE (2026-07-09, "learn everything from
+the references and produce"): built, unit-tested, verified live e2e.**
+Style extraction now learns the references' decoration language, not just
+palette: the vision pass additionally asks about masthead/banner treatment
+(colors, gradient, straight vs wavy edge), image shapes (straight/rounded/
+oval), and shadows/depth; `StyleDescription` gained mastheadFrom/To/Edge,
+photoShape, shadows; the merge prompt + example updated. Deterministic
+mapping additions in `StyleExtractionService`: extracted masthead hexes
+snap to the **nearest theme color role** (RGB distance — decor references
+roles, never literals), photoShape→clip (ellipse/oval/circle→ellipse),
+shadows→photo+statCard shadow, footer reuses the masthead roles, and the
+draft now includes a full `decor` block + an `IssueTitleOnBand` style.
+
+**Live learning run (6 page images: 3 from TCSWordTemplate.pdf + 3 slices
+of NewsLetter01.pdf, 768px, ~7 min on CPU) produced
+`nocturnal-corporate`** — charcoal `#1F1C20` page, white text, gold
+`#D4AF37` primary, amber accent, gold→dark **wave** masthead (the model
+explicitly described the references' "sweeping wave graphics" and "depth
+through contrast rather than drop shadows" — photoShape rounded, shadows
+no, faithfully flat). Activated in `TemplateCatalog` (now 4 templates).
+
+**Two defects found on the first produced PDF and fixed:**
+1. **On-band title contrast must be judged against the gradient's middle
+   and end, not its start** — the title sits right of the logo. First rule
+   picked near-black on a gold→dark band (title invisible past the
+   transition). Now: candidate (text vs background role) with the better
+   WORST-case contrast over {midpoint(from,to), to} wins
+   (`minContrastOverBand`/`midpoint` in the service). The activated
+   `nocturnal-corporate.json` was hand-corrected to `text` (white)
+   accordingly; future extractions compute it right.
+2. **Contrast lint false positive for on-band text**: `LayoutLint` compared
+   the title against the page background while a DECORATION band (pixels,
+   not a theme color) sat behind it — cost 5 points. `checkContrast` now
+   skips any TextBox overlapped by a DECORATION component (composition
+   already chose the on-band color deterministically).
+
+Final verified run with `nocturnal-corporate`: review **100/100, 0 layout
+findings**, PDF visually confirmed — white title readable across the whole
+gold→dark wave band, gold chips, dark stat card with gold accent, rounded
+photo, gold footer. Suite **100/100 tests green.**
+
 **Current next-step queue:** (1) per-section brand images
-(`storage/assets/<SECTION_NAME>/` — now doubly worth it: photos get the
-full crop/clip/shadow treatment automatically); (2) template-selection UX
-(per-run choice via API/UI — today the default is a config flip; also
-consider white section-icon variants so dark templates get real icons);
-(3) style extraction emitting decor specs from reference PDFs (the
-vocabulary now exists to extract into); (4) Phase 4 Angular editor; (5)
-Phase 5 hardening; (6) Agents #1–#5 unit tests; (7) design API asset
-serve/upload endpoints.
+(`storage/assets/<SECTION_NAME>/` — photos get the full crop/clip/shadow
+treatment automatically); (2) template-selection UX (per-run choice via
+API/UI — today the default is a config flip; also consider white
+section-icon variants so dark templates get real icons); (3) deeper
+reference learning (layout/component patterns into a persistent Design
+Knowledge Base — the ARCHITECTURE.md Pipeline 1 work; extraction now
+covers palette+typography+decor); (4) Phase 4 Angular editor; (5) Phase 5
+hardening; (6) Agents #1–#5 unit tests; (7) design API asset serve/upload
+endpoints.
 
 ### Design Intelligence Platform vision v2 (refined 2026-07-05 — incorporates specialized repositories, feedback loop, versioning, constraints, pattern learning/selection split; refines `ARCHITECTURE.md`, **NOT YET APPROVED, user is verifying before any code or `ARCHITECTURE.md` changes**)
 

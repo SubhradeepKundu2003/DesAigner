@@ -35,7 +35,8 @@ class StyleExtractionServiceTest {
     private static StyleDescription description(String name, String text, String primary) {
         return new StyleDescription(name, "#FFFFFF", "#F2F4F7", text, "#5F6B7A", primary,
                 "#FBB034", "#54B948", "#E1E4E8", "Avenir Next", "rounded and friendly",
-                "thin line icons", "airy single-column", "A calm corporate feel.");
+                "thin line icons", "airy single-column",
+                primary, "#FFFFFF", "wave", "ellipse", "yes", "A calm corporate feel.");
     }
 
     @Test
@@ -147,6 +148,52 @@ class StyleExtractionServiceTest {
     }
 
     @Test
+    void decorIsBuiltFromTheExtractedObservations() {
+        FakeStorage storage = new FakeStorage(List.of("references/ref.pdf"));
+        // masthead #1A73E8 → nearest role is primary (#1A73E8 exactly); ellipse + shadows
+        StyleExtractionService service = service(storage,
+                Map.of("ref.pdf", List.of(page("p1"))),
+                visionNotes(Map.of("p1", "note")),
+                description("x", "#1A1A1A", "#1A73E8"));
+
+        var template = service.extract().template();
+
+        assertNotNull(template.decor());
+        assertEquals("primary", template.decor().masthead().from());
+        assertEquals("background", template.decor().masthead().to(), "white masthead-to snaps to background");
+        assertEquals("wave", template.decor().masthead().edge());
+        assertEquals("ellipse", template.decor().photo().clip());
+        assertTrue(template.decor().photo().shadow());
+        // the on-band style must exist and contrast with the band's MIDDLE and END
+        // (the title sits right of the logo, past the gradient's start): the band
+        // runs #1A73E8 -> white, so near-black text wins over white text
+        assertNotNull(template.theme().textStyles().get("IssueTitleOnBand"));
+        assertEquals("text", template.theme().textStyles().get("IssueTitleOnBand").colorRole());
+    }
+
+    @Test
+    void invalidDecorObservationsFallBackToSafeDefaults() {
+        FakeStorage storage = new FakeStorage(List.of("references/ref.pdf"));
+        StyleDescription base = description("x", "#1A1A1A", "#1A73E8");
+        StyleDescription vague = new StyleDescription(base.templateName(), base.background(),
+                base.surface(), base.text(), base.muted(), base.primary(), base.secondary(),
+                base.accent(), base.divider(), base.fontFamily(), base.typographyMood(),
+                base.iconographyStyle(), base.layoutMood(),
+                "a blueish tone", null, "curvy?", "freeform", "maybe", base.summary());
+        StyleExtractionService service = service(storage,
+                Map.of("ref.pdf", List.of(page("p1"))),
+                visionNotes(Map.of("p1", "note")), vague);
+
+        var decor = service.extract().template().decor();
+
+        assertEquals("primary", decor.masthead().from(), "invalid hex falls back to primary");
+        assertEquals("background", decor.masthead().to());
+        assertEquals("flat", decor.masthead().edge());
+        assertEquals("none", decor.photo().clip());
+        assertTrue(!decor.photo().shadow());
+    }
+
+    @Test
     void noReferencePdfsIsAnError() {
         FakeStorage storage = new FakeStorage(List.of("references/readme.txt"));
         StyleExtractionService service = service(storage, Map.of(),
@@ -205,8 +252,7 @@ class StyleExtractionServiceTest {
 
     /** What a schema echo parses into: a description with every field null. */
     private static StyleDescription emptyDescription() {
-        return new StyleDescription(null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null);
+        return StyleDescription.empty();
     }
 
     /** Labels double as page content markers so the vision stub can key off the prompt. */

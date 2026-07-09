@@ -127,6 +127,13 @@ public class LayoutLint {
             if (!(c instanceof TextBox box)) {
                 continue;
             }
+            if (sitsOnDecoration(box, components)) {
+                // a DECORATION image (e.g. the masthead band) is behind this text —
+                // its fill is pixels, not a theme color, so comparing against the
+                // page background would be a false positive; composition already
+                // chose the on-band style color deterministically
+                continue;
+            }
             TextStyle style = theme.textStyles().getOrDefault(box.styleRef(), DEFAULT_STYLE);
             String textHex = theme.colors().get(style.colorRole());
             String fillHex = backgroundFillFor(box, components, theme);
@@ -167,6 +174,11 @@ public class LayoutLint {
                             + "— its section was pushed to the next page."));
         }
         return List.of();
+    }
+
+    private static boolean sitsOnDecoration(TextBox box, List<Component> components) {
+        return components.stream().anyMatch(c -> c.role() == ComponentRole.DECORATION
+                && overlaps(c.frame(), box.frame()));
     }
 
     private static String backgroundFillFor(TextBox box, List<Component> components, Theme theme) {

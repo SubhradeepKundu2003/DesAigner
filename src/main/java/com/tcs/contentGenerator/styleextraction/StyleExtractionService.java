@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.tcs.contentGenerator.agent.design.Decor;
 import com.tcs.contentGenerator.agent.design.DesignTemplate;
 import com.tcs.contentGenerator.agent.design.TemplateCatalog;
 import com.tcs.contentGenerator.design.TextStyle;
@@ -138,8 +139,7 @@ public class StyleExtractionService {
         }
         if (isEmpty(description)) {
             log.warn("Style merge retry was empty too — the draft will carry the default template's values");
-            return new StyleDescription(null, null, null, null, null, null, null, null, null,
-                    null, null, null, null, null);
+            return StyleDescription.empty();
         }
         return description;
     }
@@ -162,6 +162,11 @@ public class StyleExtractionService {
      * role), and the text role must clear Agent #9's contrast gate against the
      * extracted background — otherwise every issue built from this draft would
      * flag its own body text (the exact trap TCS Blue set for the issue title).
+     * The description's masthead/photo/shadow observations become the draft's
+     * {@code Decor} spec — extracted masthead hexes are snapped to the nearest
+     * theme color role (decor references roles, never literals), and the
+     * on-band title style picks whichever of text/background contrasts better
+     * with the band's start color.
      */
     private DesignTemplate toDraftTemplate(StyleDescription description) {
         Theme defaults = templateCatalog.getDefault().theme();
@@ -179,14 +184,95 @@ public class StyleExtractionService {
             colors.put("text", replacement);
         }
 
+        String mastheadFromRole = nearestRole(description.mastheadFrom(), colors, "primary");
+        String mastheadToRole = nearestRole(description.mastheadTo(), colors, "background");
+        // The title sits right of the logo — over the gradient's middle and end,
+        // not its start — so judge candidates by their WORST contrast against the
+        // band's midpoint and end colors and take the better one. (Judging only
+        // the start color picked a near-invisible title on a gold→dark band.)
+        String onBandRole = minContrastOverBand(colors.get("text"), colors, mastheadFromRole, mastheadToRole)
+                >= minContrastOverBand(colors.get("background"), colors, mastheadFromRole, mastheadToRole)
+                        ? "text" : "background";
+
         String fontFamily = description.fontFamily() == null ? "" : description.fontFamily().strip();
         Map<String, TextStyle> textStyles = new LinkedHashMap<>();
         defaults.textStyles().forEach((name, style) -> textStyles.put(name, new TextStyle(
                 fontFamily.isEmpty() ? style.fontFamily() : fontFamily,
                 style.fontSizePt(), style.fontWeight(), style.colorRole(), style.lineHeightPt())));
+        TextStyle issueTitle = textStyles.get("IssueTitle");
+        if (issueTitle != null) {
+            textStyles.put("IssueTitleOnBand", new TextStyle(issueTitle.fontFamily(),
+                    issueTitle.fontSizePt(), issueTitle.fontWeight(), onBandRole, issueTitle.lineHeightPt()));
+        }
+
+        boolean shadows = "yes".equalsIgnoreCase(strip(description.shadows()));
+        String photoClip = switch (strip(description.photoShape()).toLowerCase(Locale.ROOT)) {
+            case "ellipse", "oval", "circle", "circular" -> "ellipse";
+            case "rounded" -> "rounded";
+            default -> "none";
+        };
+        Decor decor = new Decor(
+                new Decor.Masthead("gradient-band", mastheadFromRole, mastheadToRole, 0, 130,
+                        "wave".equalsIgnoreCase(strip(description.mastheadEdge())) ? "wave" : "flat"),
+                new Decor.SectionHeader("chip", "primary"),
+                new Decor.Photo(photoClip, 12, shadows),
+                new Decor.StatCard("surface", "primary", shadows),
+                new Decor.Footer("band", mastheadFromRole, mastheadToRole));
 
         return new DesignTemplate(slug(description.templateName()),
-                new Theme(defaults.pageSize(), colors, textStyles, defaults.spacing()));
+                new Theme(defaults.pageSize(), colors, textStyles, defaults.spacing()), decor);
+    }
+
+    /**
+     * Snaps an extracted hex to the theme color role with the smallest RGB
+     * distance — decor references roles, never literal hexes, so the draft
+     * stays restylable. Invalid/missing hex → the given fallback role.
+     */
+    private static String nearestRole(String candidateHex, Map<String, String> colors, String fallbackRole) {
+        String hex = sanitizeHex(candidateHex, null);
+        if (hex == null) {
+            return fallbackRole;
+        }
+        String best = fallbackRole;
+        long bestDistance = Long.MAX_VALUE;
+        for (Map.Entry<String, String> entry : colors.entrySet()) {
+            long distance = rgbDistance(hex, entry.getValue());
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = entry.getKey();
+            }
+        }
+        return best;
+    }
+
+    private static double minContrastOverBand(String candidateHex, Map<String, String> colors,
+            String fromRole, String toRole) {
+        String from = colors.get(fromRole);
+        String to = colors.get(toRole);
+        return Math.min(contrastRatio(candidateHex, midpoint(from, to)), contrastRatio(candidateHex, to));
+    }
+
+    /** Channel-wise average of two #RRGGBB colors — the gradient's middle. */
+    private static String midpoint(String hexA, String hexB) {
+        int a = Integer.parseInt(hexA.substring(1), 16);
+        int b = Integer.parseInt(hexB.substring(1), 16);
+        int r = ((a >> 16 & 0xFF) + (b >> 16 & 0xFF)) / 2;
+        int g = ((a >> 8 & 0xFF) + (b >> 8 & 0xFF)) / 2;
+        int bl = ((a & 0xFF) + (b & 0xFF)) / 2;
+        return String.format("#%02X%02X%02X", r, g, bl);
+    }
+
+    private static long rgbDistance(String hexA, String hexB) {
+        int a = Integer.parseInt(hexA.substring(1), 16);
+        int b = Integer.parseInt(hexB.substring(1), 16);
+        long dr = (a >> 16 & 0xFF) - (b >> 16 & 0xFF);
+        long dg = (a >> 8 & 0xFF) - (b >> 8 & 0xFF);
+        long db = (a & 0xFF) - (b & 0xFF);
+        return dr * dr + dg * dg + db * db;
+    }
+
+    private static String strip(String s) {
+        return s == null ? "" : s.strip();
     }
 
     private static String extractedColor(StyleDescription d, String role) {

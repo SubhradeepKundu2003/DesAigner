@@ -30,7 +30,7 @@ public class TemplateCatalog {
 
     public TemplateCatalog(ObjectMapper objectMapper,
             @Value("${app.design.template:tcs-brand}") String defaultName) {
-        this.templates = Stream.of("td-classic", "tcs-brand", "noir-luxe")
+        this.templates = Stream.of("td-classic", "tcs-brand", "noir-luxe", "nocturnal-corporate")
                 .map(name -> load(objectMapper, "design-templates/" + name + ".json"))
                 .collect(Collectors.toUnmodifiableMap(DesignTemplate::name, Function.identity()));
         if (!templates.containsKey(defaultName)) {

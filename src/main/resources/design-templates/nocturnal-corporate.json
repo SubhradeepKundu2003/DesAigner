@@ -1,0 +1,117 @@
+﻿{
+  "name" : "nocturnal-corporate",
+  "theme" : {
+    "pageSize" : {
+      "widthPt" : 595.28,
+      "heightPt" : 841.89
+    },
+    "colors" : {
+      "primary" : "#D4AF37",
+      "secondary" : "#4A5869",
+      "divider" : "#E1E4E8",
+      "accent" : "#FFB300",
+      "muted" : "#9CAEB5",
+      "surface" : "#242328",
+      "background" : "#1F1C20",
+      "text" : "#FFFFFF"
+    },
+    "textStyles" : {
+      "Headline" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 13.0,
+        "fontWeight" : "bold",
+        "colorRole" : "text",
+        "lineHeightPt" : 17.0
+      },
+      "Stat" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 32.0,
+        "fontWeight" : "bold",
+        "colorRole" : "text",
+        "lineHeightPt" : 36.0
+      },
+      "IssueTitleOnBand" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 28.0,
+        "fontWeight" : "bold",
+        "colorRole" : "text",
+        "lineHeightPt" : 34.0
+      },
+      "StatLabel" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 9.0,
+        "fontWeight" : "normal",
+        "colorRole" : "muted",
+        "lineHeightPt" : 12.0
+      },
+      "IssueTitle" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 28.0,
+        "fontWeight" : "bold",
+        "colorRole" : "text",
+        "lineHeightPt" : 34.0
+      },
+      "HeroHeadline" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 20.0,
+        "fontWeight" : "bold",
+        "colorRole" : "text",
+        "lineHeightPt" : 25.0
+      },
+      "Body" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 10.0,
+        "fontWeight" : "normal",
+        "colorRole" : "text",
+        "lineHeightPt" : 14.0
+      },
+      "EventItem" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 10.0,
+        "fontWeight" : "normal",
+        "colorRole" : "text",
+        "lineHeightPt" : 14.0
+      },
+      "SectionTitle" : {
+        "fontFamily" : "Helvetica Neue",
+        "fontSizePt" : 16.0,
+        "fontWeight" : "bold",
+        "colorRole" : "text",
+        "lineHeightPt" : 20.0
+      }
+    },
+    "spacing" : {
+      "marginPt" : 48.0,
+      "gutterPt" : 16.0
+    }
+  },
+  "decor" : {
+    "masthead" : {
+      "style" : "gradient-band",
+      "from" : "primary",
+      "to" : "background",
+      "angle" : 0,
+      "heightPt" : 130.0,
+      "edge" : "wave"
+    },
+    "sectionHeader" : {
+      "style" : "chip",
+      "colorRole" : "primary"
+    },
+    "photo" : {
+      "clip" : "rounded",
+      "cornerRadiusPt" : 12.0,
+      "shadow" : false
+    },
+    "statCard" : {
+      "fill" : "surface",
+      "accent" : "primary",
+      "shadow" : false
+    },
+    "footer" : {
+      "style" : "band",
+      "from" : "primary",
+      "to" : "background"
+    }
+  }
+}
