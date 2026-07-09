@@ -10,6 +10,7 @@ import com.tcs.contentGenerator.agent.design.CompositionPlan;
 import com.tcs.contentGenerator.agent.design.Decor;
 import com.tcs.contentGenerator.agent.design.DesignTemplate;
 import com.tcs.contentGenerator.agent.design.SectionComposition;
+import com.tcs.contentGenerator.agent.design.SectionPattern;
 import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.design.ComponentRole;
 import com.tcs.contentGenerator.design.DesignDocument;
@@ -71,6 +72,9 @@ public class LayoutEngine {
     private static final double KICKER_BAR_GAP = 6;
     /** Vertical breathing room a section tint band adds above/below its section. */
     private static final double BAND_BLEED = 10;
+    /** Reserved photo-slot geometry (filled by Agent #8, dropped if nothing fits it). */
+    private static final double PHOTO_SLOT_HEIGHT = 150;
+    private static final double PHOTO_SLOT_WIDTH_FRACTION = 0.62;
 
     private final TextMeasurer measurer = new TextMeasurer();
 
@@ -125,6 +129,38 @@ public class LayoutEngine {
             case TWO_COLUMN -> layoutTwoColumn(p, section, theme);
             case STANDARD -> layoutStandard(p, section, theme);
         }
+        reservePhotoSlot(p, section, decor);
+    }
+
+    /**
+     * Reserves an <em>empty</em> image slot ({@code assetId} null) below the
+     * section's content when the template has photo decor — the graphics agent
+     * fills it (source-document image first, then the section's brand default,
+     * then GENERIC) or removes it. Reserving in the layout, instead of
+     * scavenging leftover gaps afterwards, is what guarantees an image-rich
+     * page: the editorial layout is too dense to leave 48pt gaps by accident.
+     * Skipped for HERO (the panel already anchors it visually) and EVENT_LIST
+     * (a list, not an article).
+     */
+    private void reservePhotoSlot(Paginator p, SectionComposition section, Decor decor) {
+        if (decor == null || decor.photo() == null || section.articles().isEmpty()
+                || section.pattern() == SectionPattern.HERO
+                || section.pattern() == SectionPattern.EVENT_LIST) {
+            return;
+        }
+        GeneratedArticle article = section.articles().get(0);
+        SourceLink link = new SourceLink(section.section().title(), article.headline());
+        if (!p.fits(ITEM_GAP + PHOTO_SLOT_HEIGHT)) {
+            // a slot that would spill onto a fresh page leaves an orphan
+            // image-only page — this section just goes unillustrated
+            return;
+        }
+        p.advance(ITEM_GAP);
+        double h = p.reserve(PHOTO_SLOT_HEIGHT, "photo-slot:" + section.section().title());
+        p.add(new ImageBox(p.nextId(), ComponentRole.IMAGE_PLACEHOLDER,
+                new Frame(p.x(), p.y(), p.contentWidth() * PHOTO_SLOT_WIDTH_FRACTION, h),
+                0, false, link, null, section.section().title()));
+        p.advance(h);
     }
 
     /** Appends the footer band to every page — drawn over empty bottom-edge space. */

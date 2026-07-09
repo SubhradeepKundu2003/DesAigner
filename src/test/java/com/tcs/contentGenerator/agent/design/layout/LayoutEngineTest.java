@@ -327,7 +327,14 @@ class LayoutEngineTest {
 
     @Test
     void everyOtherSectionGetsAFullBleedTintBand() {
-        DesignDocument document = new LayoutEngine().layout(fixturePlan(), editorialTemplate(), "Test Issue", "job-1");
+        // a taller page than the pagination fixture: bands are skipped for
+        // page-crossing sections, and photo slots make sections tall
+        DesignTemplate base = editorialTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), tallPage, "Test Issue", "job-1");
         List<com.tcs.contentGenerator.design.ShapeBox> bands = document.pages().stream()
                 .flatMap(p -> p.components().stream())
                 .filter(c -> c.role() == ComponentRole.DECORATION)
@@ -389,6 +396,33 @@ class LayoutEngineTest {
         assertTrue(all.stream().filter(c -> c.role() == ComponentRole.ARTICLE_LEAD).count()
                         <= all.stream().filter(c -> c.role() == ComponentRole.ARTICLE_BODY).count(),
                 "never more leads than bodies");
+    }
+
+    @Test
+    void photoDecorReservesAnEmptySlotPerEligibleSection() {
+        // needs a page tall enough for ALL slots to fit: a slot that would
+        // spill onto a fresh page is skipped (no orphan image-only pages)
+        DesignTemplate base = editorialTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 1600), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), tallPage, "Test Issue", "job-1");
+        List<ImageBox> slots = document.pages().stream().flatMap(p -> p.components().stream())
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.IMAGE_PLACEHOLDER && box.assetId() == null)
+                .toList();
+        // fixture plan: hero + stat + standard + two-column + events → slots for
+        // stat, standard, two-column (hero and event list are excluded)
+        assertTrue(slots.size() == 3, "expected 3 reserved photo slots, got " + slots.size());
+        for (ImageBox slot : slots) {
+            assertTrue(slot.source() != null, "slots carry the article link for image resolution");
+        }
+        // and the decor-less template reserves none
+        DesignDocument plain = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
+        assertTrue(plain.pages().stream().flatMap(p -> p.components().stream())
+                .noneMatch(c -> c instanceof ImageBox box && box.assetId() == null
+                        && box.role() == ComponentRole.IMAGE_PLACEHOLDER));
     }
 
     @Test

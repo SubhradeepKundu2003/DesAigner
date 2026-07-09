@@ -61,8 +61,13 @@ public class ImageGraphicsAgent implements Agent {
         ImagePlacer placer = new ImagePlacer(context.getGeneratedNewsletter(), context.getDocuments(),
                 document.assets(), storage, assetLibrary,
                 template.decor() == null ? null : template.decor().photo(), context.getJobId());
+        // two full passes: every reserved slot fills first (registering its
+        // section), then gap-scavenging only illustrates still-bare sections
         List<Page> pages = document.pages().stream()
-                .map(page -> placer.enrichPage(page, document.theme()))
+                .map(placer::fillSlots)
+                .toList();
+        pages = pages.stream()
+                .map(page -> placer.scavengeGaps(page, document.theme()))
                 .toList();
 
         DesignDocument enriched = new DesignDocument(document.schemaVersion(), document.revision(),

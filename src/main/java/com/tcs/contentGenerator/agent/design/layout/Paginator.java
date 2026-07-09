@@ -52,6 +52,11 @@ public class Paginator {
         return margin + contentHeight - y;
     }
 
+    /** Whether {@code heightPt} fits on the current page without a page break. */
+    public boolean fits(double heightPt) {
+        return heightPt <= remaining();
+    }
+
     /**
      * Reserves {@code desiredHeightPt} of vertical space, starting a new page
      * first if it would not fit on the current one. Returns the height to

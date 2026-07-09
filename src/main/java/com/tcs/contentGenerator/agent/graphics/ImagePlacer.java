@@ -66,6 +66,8 @@ final class ImagePlacer {
     private final Decor.Photo photoDecor;
     private final String jobId;
     private final Set<String> usedSourceRefs = new HashSet<>();
+    /** Sections already illustrated via a reserved slot — the gap pass skips them. */
+    private final Set<String> sectionsWithImage = new HashSet<>();
     private final List<Asset> assets = new ArrayList<>();
     private final List<ImagePlacement> placements = new ArrayList<>();
     private final AtomicInteger sequence;
@@ -83,7 +85,20 @@ final class ImagePlacer {
         this.sequence = new AtomicInteger(existingAssets.size());
     }
 
-    Page enrichPage(Page page, Theme theme) {
+    /**
+     * Pass 1 — fill (or drop) the empty photo slots the layout reserved. Run
+     * over <em>all</em> pages before any {@link #scavengeGaps} call: the
+     * one-image-per-section guard only works if every slot fill lands in
+     * {@code sectionsWithImage} before the gap pass starts (a section's slot
+     * can sit on a later page than its first article).
+     */
+    Page fillSlots(Page page) {
+        List<Component> components = fillReservedSlots(page.components());
+        return components == page.components() ? page : new Page(page.id(), components);
+    }
+
+    /** Pass 2 — legacy gap-scavenging for articles whose section has no image yet. */
+    Page scavengeGaps(Page page, Theme theme) {
         List<Component> components = page.components();
         List<Component> additions = new ArrayList<>();
         for (int i = 0; i < components.size(); i++) {
@@ -93,6 +108,9 @@ final class ImagePlacer {
             }
             articlesConsidered++;
             SourceLink link = body.source();
+            if (sectionsWithImage.contains(link.sectionTitle())) {
+                continue;
+            }
             ArticleMatch match = matchArticle(link);
             ImageCandidate candidate = resolveCandidate(match);
             if (candidate == null) {
@@ -111,6 +129,46 @@ final class ImagePlacer {
         List<Component> merged = new ArrayList<>(components);
         merged.addAll(additions);
         return new Page(page.id(), merged);
+    }
+
+    /**
+     * The layout engine reserves empty {@code IMAGE_PLACEHOLDER} boxes
+     * ({@code assetId} null) below sections when the template asks for photos.
+     * Each gets the best available image (same source-doc-first resolution as
+     * the gap path, with the section's brand default / GENERIC as fallback) —
+     * or is removed, so no dashed placeholder ever reaches the export.
+     */
+    private List<Component> fillReservedSlots(List<Component> components) {
+        boolean changed = false;
+        List<Component> out = new ArrayList<>(components.size());
+        for (Component c : components) {
+            if (!(c instanceof ImageBox slot) || slot.assetId() != null
+                    || slot.role() != ComponentRole.IMAGE_PLACEHOLDER || slot.source() == null) {
+                out.add(c);
+                continue;
+            }
+            changed = true;
+            articlesConsidered++;
+            ImageCandidate candidate = resolveCandidate(matchArticle(slot.source()));
+            if (candidate == null) {
+                log.debug("No image available for reserved slot {} — dropping it", slot.id());
+                continue;
+            }
+            int n = sequence.incrementAndGet();
+            String assetId = "graphics-asset-" + n;
+            int[] dims = readDimensions(candidate.storedRef());
+            StoredImage image = treatedOrRaw(candidate.storedRef(), slot.frame(), n, dims);
+            assets.add(new Asset(assetId, "image", image.storedRef(), image.width(), image.height()));
+            out.add(new ImageBox(slot.id(), slot.role(), slot.frame(), slot.z(), slot.locked(),
+                    slot.source(), assetId, slot.altText()));
+            if (candidate.source() == ImageSource.SOURCE_DOCUMENT) {
+                usedSourceRefs.add(candidate.storedRef());
+            }
+            sectionsWithImage.add(slot.source().sectionTitle());
+            placements.add(new ImagePlacement(slot.source().sectionTitle(),
+                    slot.source().articleHeadline(), candidate.source(), candidate.storedRef()));
+        }
+        return changed ? out : components;
     }
 
     List<Asset> assets() {

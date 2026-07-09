@@ -1,4 +1,4 @@
-﻿package com.tcs.contentGenerator.agent.graphics;
+package com.tcs.contentGenerator.agent.graphics;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -159,6 +159,52 @@ class ImageGraphicsAgentTest {
         assertEquals(0, context.getGraphicsReport().imagesPlaced());
     }
 
+    @Test
+    void fillsAReservedPhotoSlotWithTheBestAvailableImage() throws IOException {
+        TextBox body = bodyBox(100, 40, LINK);
+        ImageBox slot = new ImageBox("slot-1", ComponentRole.IMAGE_PLACEHOLDER,
+                new Frame(20, 160, 160, 100), 0, false, LINK, null, "Delivery Highlights");
+        Page page = new Page("page-1", List.of(body, slot));
+        DesignDocument document = documentOf(page);
+
+        ContentItem item = contentItem(new SourceRef("other.docx", "Body", 2));
+        PipelineContext context = contextWith(document, newsletterWith(item), List.of());
+        byte[] png = tinyPng(4, 2);
+        StorageService storage = new FakeStorageService(
+                Map.of("assets/DELIVERY_HIGHLIGHTS/default-photo.png", png),
+                Map.of("assets/DELIVERY_HIGHLIGHTS", List.of("assets/DELIVERY_HIGHLIGHTS/default-photo.png")));
+
+        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets"), PLAIN_TEMPLATES).execute(context);
+
+        List<Component> components = context.getDesignDocument().pages().get(0).components();
+        assertEquals(2, components.size(), "the slot is filled in place, nothing added or removed");
+        ImageBox filled = (ImageBox) components.get(1);
+        assertTrue(filled.assetId() != null, "the reserved slot must be filled");
+        assertEquals(new Frame(20, 160, 160, 100), filled.frame(), "the slot keeps its reserved frame");
+        assertEquals(1, context.getGraphicsReport().imagesPlaced());
+        // the gap pass must not add a second image for the same section
+        assertTrue(components.stream().filter(ImageBox.class::isInstance).count() == 1);
+    }
+
+    @Test
+    void dropsAReservedSlotWhenNoImageExistsAnywhere() {
+        TextBox body = bodyBox(100, 40, LINK);
+        ImageBox slot = new ImageBox("slot-1", ComponentRole.IMAGE_PLACEHOLDER,
+                new Frame(20, 160, 160, 100), 0, false, LINK, null, "Delivery Highlights");
+        Page page = new Page("page-1", List.of(body, slot));
+        DesignDocument document = documentOf(page);
+
+        ContentItem item = contentItem(new SourceRef("other.docx", "Body", 2));
+        PipelineContext context = contextWith(document, newsletterWith(item), List.of());
+        StorageService storage = new FakeStorageService(Map.of(), Map.of());
+
+        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets"), PLAIN_TEMPLATES).execute(context);
+
+        assertEquals(1, context.getDesignDocument().pages().get(0).components().size(),
+                "an unfillable slot must be removed, never exported as a dashed placeholder");
+        assertEquals(0, context.getGraphicsReport().imagesPlaced());
+    }
+
     private static TextBox bodyBox(double y, double h, SourceLink link) {
         return new TextBox("cmp-1", ComponentRole.ARTICLE_BODY, new Frame(20, y, 260, h), 0, false,
                 link, "Body", "NPS reached 72 this quarter across 120 accounts.");
@@ -183,7 +229,7 @@ class ImageGraphicsAgentTest {
         PlannedItem planned = new PlannedItem(item, 9, "strong quarter");
         GeneratedArticle article = new GeneratedArticle("NPS climbs to 72",
                 "NPS reached 72 this quarter across 120 accounts.", planned);
-        return new GeneratedNewsletter("TD Monthly â€” July 2026",
+        return new GeneratedNewsletter("TD Monthly - July 2026",
                 List.of(new GeneratedSection(NewsletterSection.DELIVERY_HIGHLIGHTS, List.of(article))));
     }
 
