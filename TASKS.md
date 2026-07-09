@@ -1163,10 +1163,28 @@ page 1 = full-width hero photo above "A Message from Leadership" —
 matches the user's TCS magazine reference layout; per-section images
 elsewhere; 0 layout findings.
 
+**Image-left/right alternation DONE (2026-07-10, second layout pattern,
+user-approved):** `Decor.Photo` gained `placement` — `"side"` lays
+STANDARD-section articles as magazine rows: photo (36% content width,
+height clamped 100–190pt to the text block) beside the text, alternating
+right/left via one issue-wide counter (`AtomicInteger` local to the
+layout() call, threaded through `layoutSection`); whole row reserved at
+once so a page break can't split text from image; the per-section
+below-slot is skipped for side-image sections (other patterns keep it).
+Anything else/null = "below" (backward compat). Slots are the same empty
+`IMAGE_PLACEHOLDER`s the graphics agent fills per article — so a 4-article
+section gets 4 alternating images (source-doc photos first). tcs-brand +
+nocturnal side, noir-luxe below; extraction emits side. Suite **110/110**;
+live e2e on the image docx: page 2 = right/left/right/left magazine rows,
+8 images total across the issue. Known nit for follow-up: section headers
+can orphan at a page bottom when the next side-image row doesn't fit
+(review flags it LOW — a keep-with-next pagination improvement would
+retire it).
+
 **Current next-step queue:** (1) replace the abstract default photos with
 real photography (drop-in, zero code); (2) remaining layout patterns (card
-grid, image-left/right alternation, LLM-chosen pull quotes, KPI tiles —
-see "bigger follow-up" above);
+grid, LLM-chosen pull quotes, KPI tiles) + keep-with-next pagination for
+section headers;
 (3) template-selection UX (per-run choice via API/UI — today the default
 is a config flip; also consider white section-icon variants so dark
 templates get real icons); (4) deeper reference learning (layout/component

@@ -57,8 +57,12 @@ public record Decor(Masthead masthead, SectionHeader sectionHeader, Hero hero,
      * Photo treatment applied by the graphics agent: crop-to-fill plus
      * {@code clip} "ellipse" / "rounded" (with {@code cornerRadiusPt}) /
      * anything else = straight edges, and an optional soft shadow.
+     * {@code placement} "side" lays STANDARD-section articles out with their
+     * photo <em>beside</em> the text, alternating right/left across the issue
+     * (magazine style); anything else (including null) keeps one photo slot
+     * below each eligible section's content.
      */
-    public record Photo(String clip, double cornerRadiusPt, boolean shadow) {
+    public record Photo(String clip, double cornerRadiusPt, boolean shadow, String placement) {
     }
 
     /** Rounded card with a left accent bar behind the stat value/label row. */

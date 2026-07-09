@@ -203,7 +203,7 @@ class LayoutEngineTest {
                 new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "wave"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", false),
                 null, null,
-                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true),
+                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, null),
                 new com.tcs.contentGenerator.agent.design.Decor.StatCard("background", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Footer("band", "primary", "secondary")));
     }
@@ -222,7 +222,7 @@ class LayoutEngineTest {
                 new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Hero("panel", "surface", "primary"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionBand("surface"),
-                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true),
+                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, null),
                 new com.tcs.contentGenerator.agent.design.Decor.StatCard("surface", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Footer("band", "primary", "secondary")));
     }
@@ -453,6 +453,52 @@ class LayoutEngineTest {
         assertTrue(plain.pages().stream().flatMap(p -> p.components().stream())
                 .noneMatch(c -> c instanceof ImageBox box && box.assetId() == null
                         && box.role() == ComponentRole.IMAGE_PLACEHOLDER));
+    }
+
+    @Test
+    void sideImagePlacementAlternatesAcrossArticles() {
+        DesignTemplate base = editorialTemplate();
+        var d = base.decor();
+        DesignTemplate sideImages = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 1600), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                new com.tcs.contentGenerator.agent.design.Decor(d.masthead(), d.sectionHeader(), d.hero(),
+                        d.sectionBand(),
+                        new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, "side"),
+                        d.statCard(), d.footer()));
+        GeneratedArticle first = new GeneratedArticle("First side article",
+                "A body long enough to sit beside its image comfortably.", null);
+        GeneratedArticle second = new GeneratedArticle("Second side article",
+                "Another body long enough to sit beside its image comfortably.", null);
+        SectionComposition section = new SectionComposition(NewsletterSection.PROJECT_UPDATES,
+                SectionPattern.STANDARD, List.of(first, second), "primary", null, null, null);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), sideImages, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> slots = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.IMAGE_PLACEHOLDER && box.assetId() == null)
+                .toList();
+        assertTrue(slots.size() == 2, "one side slot per article, got " + slots.size());
+        ImageBox slotA = slots.get(0);
+        ImageBox slotB = slots.get(1);
+        assertTrue(slotA.frame().x() != slotB.frame().x(),
+                "consecutive side images must sit on opposite sides");
+        // each slot's article text sits beside (not below) it: the matching
+        // headline shares the slot's row
+        for (ImageBox slot : slots) {
+            TextBox headline = all.stream()
+                    .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                    .filter(b -> b.role() == ComponentRole.ARTICLE_HEADLINE
+                            && b.text().equals(slot.altText()))
+                    .findFirst().orElseThrow();
+            assertTrue(Math.abs(headline.frame().y() - slot.frame().y()) < EPSILON,
+                    "headline and image share the row top");
+            assertTrue(!overlaps(headline.frame(), slot.frame()), "text and image must not overlap");
+        }
+        // no extra below-section slot for a side-image section
+        assertTrue(slots.size() == 2, "no additional below-slot expected");
     }
 
     @Test

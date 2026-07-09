@@ -32,7 +32,7 @@
     "sectionHeader": { "style": "chip", "colorRole": "primary", "kicker": true },
     "hero": { "style": "photo-led", "fill": "surface", "accent": "secondary" },
     "sectionBand": { "fill": "surface" },
-    "photo": { "clip": "rounded", "cornerRadiusPt": 12, "shadow": true },
+    "photo": { "clip": "rounded", "cornerRadiusPt": 12, "shadow": true, "placement": "side" },
     "statCard": { "fill": "surface", "accent": "secondary", "shadow": true },
     "footer": { "style": "band", "from": "secondary", "to": "primary" }
   }

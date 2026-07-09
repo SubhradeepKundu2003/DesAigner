@@ -77,6 +77,10 @@ public class LayoutEngine {
     private static final double PHOTO_SLOT_WIDTH_FRACTION = 0.62;
     /** Photo-led hero: full-width magazine photo above the headline. */
     private static final double HERO_PHOTO_HEIGHT = 210;
+    /** Side-image rows (placement "side"): image column fraction + height clamp. */
+    private static final double SIDE_IMAGE_WIDTH_FRACTION = 0.36;
+    private static final double SIDE_IMAGE_MIN_HEIGHT = 100;
+    private static final double SIDE_IMAGE_MAX_HEIGHT = 190;
 
     private final TextMeasurer measurer = new TextMeasurer();
 
@@ -89,6 +93,9 @@ public class LayoutEngine {
         p.advance(SECTION_GAP);
 
         boolean kicker = decor != null && decor.sectionHeader() != null && decor.sectionHeader().kicker();
+        // one running counter for the whole issue so side images keep alternating
+        // across sections, not just within one
+        java.util.concurrent.atomic.AtomicInteger sideImageCounter = new java.util.concurrent.atomic.AtomicInteger();
         List<SectionComposition> sections = plan.sections();
         for (int i = 0; i < sections.size(); i++) {
             SectionComposition section = sections.get(i);
@@ -103,7 +110,7 @@ public class LayoutEngine {
             double bandTop = p.y() - BAND_BLEED;
             placeSectionHeader(p, section, theme, decor);
             p.advance(PARAGRAPH_GAP);
-            layoutSection(p, section, theme, decor);
+            layoutSection(p, section, theme, decor, sideImageCounter);
             if (banded && p.pageIndex() == bandPage) {
                 // full-bleed tint behind the whole section; a ShapeBox (not a baked
                 // image) so the contrast lint can still judge text on it. Sections
@@ -123,15 +130,69 @@ public class LayoutEngine {
         return new DesignDocument(1, 1, new DesignMeta(issueTitle, jobId), theme, List.of(), pages);
     }
 
-    private void layoutSection(Paginator p, SectionComposition section, Theme theme, Decor decor) {
+    private void layoutSection(Paginator p, SectionComposition section, Theme theme, Decor decor,
+            java.util.concurrent.atomic.AtomicInteger sideImageCounter) {
+        boolean sideImages = decor != null && decor.photo() != null
+                && "side".equals(decor.photo().placement());
         switch (section.pattern()) {
             case HERO -> layoutHero(p, section, theme, decor);
             case STAT_CALLOUT -> layoutStatCallout(p, section, theme, decor);
             case EVENT_LIST -> layoutEventList(p, section, theme);
             case TWO_COLUMN -> layoutTwoColumn(p, section, theme);
-            case STANDARD -> layoutStandard(p, section, theme);
+            case STANDARD -> {
+                if (sideImages) {
+                    layoutStandardWithSideImages(p, section, theme, sideImageCounter);
+                } else {
+                    layoutStandard(p, section, theme);
+                }
+            }
         }
-        reservePhotoSlot(p, section, decor);
+        // side-image sections are already illustrated per article
+        if (!(sideImages && section.pattern() == SectionPattern.STANDARD)) {
+            reservePhotoSlot(p, section, decor);
+        }
+    }
+
+    /**
+     * Magazine rows: each article's photo sits <em>beside</em> its text,
+     * alternating right/left across the issue. The photo is an empty slot the
+     * graphics agent fills (source-document image first, then the section's
+     * brand default) or removes. The whole row is reserved at once so a page
+     * break can't separate an article from its image.
+     */
+    private void layoutStandardWithSideImages(Paginator p, SectionComposition section, Theme theme,
+            java.util.concurrent.atomic.AtomicInteger sideImageCounter) {
+        TextStyle headStyle = styleOf(theme, "Headline");
+        List<GeneratedArticle> articles = section.articles();
+        double gutter = theme.spacing().gutterPt();
+        double imageWidth = p.contentWidth() * SIDE_IMAGE_WIDTH_FRACTION;
+        double textWidth = p.contentWidth() - imageWidth - gutter;
+        for (int i = 0; i < articles.size(); i++) {
+            GeneratedArticle article = articles.get(i);
+            SourceLink link = new SourceLink(section.section().title(), article.headline());
+            boolean imageLeft = sideImageCounter.getAndIncrement() % 2 == 1;
+
+            double headHeight = measurer.heightOf(article.headline(), headStyle, textWidth);
+            BodySplit body = splitBody(article.body(), theme);
+            double textHeight = headHeight + PARAGRAPH_GAP + body.height(measurer, theme, textWidth);
+            double imageHeight = Math.min(SIDE_IMAGE_MAX_HEIGHT,
+                    Math.max(SIDE_IMAGE_MIN_HEIGHT, textHeight));
+            double rowHeight = p.reserve(Math.max(textHeight, imageHeight),
+                    "side-image-row:" + article.headline());
+            double y = p.y();
+            double textX = imageLeft ? p.x() + imageWidth + gutter : p.x();
+            double imageX = imageLeft ? p.x() : p.x() + textWidth + gutter;
+            p.add(new ImageBox(p.nextId(), ComponentRole.IMAGE_PLACEHOLDER,
+                    new Frame(imageX, y, imageWidth, Math.min(imageHeight, rowHeight)),
+                    0, false, link, null, article.headline()));
+            addTextAt(p, textX, y, textWidth, headHeight,
+                    ComponentRole.ARTICLE_HEADLINE, "Headline", article.headline(), link);
+            body.place(this, p, textX, y + headHeight + PARAGRAPH_GAP, textWidth, theme, link);
+            p.advance(rowHeight);
+            if (i < articles.size() - 1) {
+                p.advance(ITEM_GAP);
+            }
+        }
     }
 
     /**

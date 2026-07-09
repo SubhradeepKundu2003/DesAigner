@@ -22,7 +22,7 @@ class PhotoEffectsTest {
     @Test
     void outputHasExactRequestedDimensions() throws Exception {
         byte[] out = PhotoEffects.treat(solidPng(300, 200, Color.BLUE), 200, 120,
-                new Decor.Photo("rounded", 12, true), 24);
+                new Decor.Photo("rounded", 12, true, null), 24);
         BufferedImage image = decode(out);
         assertEquals(200, image.getWidth());
         assertEquals(120, image.getHeight());
@@ -31,7 +31,7 @@ class PhotoEffectsTest {
     @Test
     void ellipseClipLeavesCornersTransparent() throws Exception {
         byte[] out = PhotoEffects.treat(solidPng(300, 200, Color.BLUE), 200, 120,
-                new Decor.Photo("ellipse", 0, false), 0);
+                new Decor.Photo("ellipse", 0, false, null), 0);
         BufferedImage image = decode(out);
         assertEquals(0, alphaAt(image, 1, 1), "top-left corner must be transparent outside the ellipse");
         assertEquals(0, alphaAt(image, 198, 1), "top-right corner must be transparent outside the ellipse");
@@ -41,7 +41,7 @@ class PhotoEffectsTest {
     @Test
     void shadowPaintsPixelsOutsideThePhotoShape() throws Exception {
         byte[] out = PhotoEffects.treat(solidPng(300, 200, Color.BLUE), 200, 120,
-                new Decor.Photo("ellipse", 0, true), 0);
+                new Decor.Photo("ellipse", 0, true, null), 0);
         BufferedImage image = decode(out);
         // straight below the ellipse's bottom edge: outside the photo, inside the shadow
         int shadowAlpha = alphaAt(image, 100, 112);
@@ -63,7 +63,7 @@ class PhotoEffectsTest {
         ImageIO.write(source, "png", bytes);
 
         byte[] out = PhotoEffects.treat(bytes.toByteArray(), 100, 100,
-                new Decor.Photo("none", 0, false), 0);
+                new Decor.Photo("none", 0, false, null), 0);
         BufferedImage image = decode(out);
         // a centered crop of the middle keeps the red|blue seam at the horizontal center
         assertEquals(Color.RED.getRGB(), image.getRGB(25, 50));
@@ -73,7 +73,7 @@ class PhotoEffectsTest {
     @Test
     void undecodableSourceThrowsIoException() {
         assertThrows(IOException.class, () -> PhotoEffects.treat(new byte[] {1, 2, 3}, 100, 100,
-                new Decor.Photo("none", 0, false), 0));
+                new Decor.Photo("none", 0, false, null), 0));
     }
 
     private static byte[] solidPng(int w, int h, Color color) throws IOException {

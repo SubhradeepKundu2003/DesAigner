@@ -124,7 +124,8 @@
     "photo" : {
       "clip" : "rounded",
       "cornerRadiusPt" : 12.0,
-      "shadow" : false
+      "shadow" : false,
+      "placement" : "side"
     },
     "statCard" : {
       "fill" : "surface",
