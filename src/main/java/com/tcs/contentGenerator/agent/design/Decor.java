@@ -34,10 +34,14 @@ public record Decor(Masthead masthead, SectionHeader sectionHeader, Hero hero,
     }
 
     /**
-     * Rounded tinted panel behind the whole HERO section (Leadership Message),
-     * with a large translucent quote glyph in the {@code accent} color.
+     * HERO section treatment. {@code style} "photo-led" = magazine style: a
+     * full-width photo slot at the top of the section (filled by the graphics
+     * agent like any reserved slot), headline and lead below it, no panel.
+     * Anything else (including null) = "panel": a rounded tinted panel behind
+     * the section with a large translucent quote glyph in the {@code accent}
+     * color; {@code fill}/{@code accent} only apply to the panel style.
      */
-    public record Hero(String fill, String accent) {
+    public record Hero(String style, String fill, String accent) {
     }
 
     /**

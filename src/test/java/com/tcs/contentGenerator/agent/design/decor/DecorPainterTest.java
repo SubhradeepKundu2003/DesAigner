@@ -64,7 +64,7 @@ class DecorPainterTest {
 
     @Test
     void heroPanelWithQuoteGlyphRasterizes() throws Exception {
-        String svg = DecorPainter.heroPanel(new Decor.Hero("surface", "primary"), THEME, 500, 160);
+        String svg = DecorPainter.heroPanel(new Decor.Hero("panel", "surface", "primary"), THEME, 500, 160);
         assertTrue(svg.contains("<text"), "hero panel carries the quote glyph");
         assertTrue(svg.contains("#EBEBEB") && svg.contains("#4E84C4"), "resolved fill + accent colors");
         BufferedImage image = rasterize(svg);

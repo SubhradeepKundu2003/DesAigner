@@ -114,6 +114,7 @@
       "kicker" : true
     },
     "hero" : {
+      "style" : "photo-led",
       "fill" : "surface",
       "accent" : "primary"
     },

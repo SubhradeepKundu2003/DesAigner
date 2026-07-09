@@ -30,7 +30,7 @@
   "decor": {
     "masthead": { "style": "gradient-band", "from": "secondary", "to": "background", "angle": 0, "heightPt": 130, "edge": "wave" },
     "sectionHeader": { "style": "chip", "colorRole": "primary", "kicker": true },
-    "hero": { "fill": "surface", "accent": "primary" },
+    "hero": { "style": "panel", "fill": "surface", "accent": "primary" },
     "sectionBand": { "fill": "surface" },
     "photo": { "clip": "ellipse", "cornerRadiusPt": 12, "shadow": true },
     "statCard": { "fill": "surface", "accent": "primary", "shadow": true },

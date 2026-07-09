@@ -220,7 +220,7 @@ class LayoutEngineTest {
         return new DesignTemplate(plain.name(), theme, new com.tcs.contentGenerator.agent.design.Decor(
                 new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "flat"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", true),
-                new com.tcs.contentGenerator.agent.design.Decor.Hero("surface", "primary"),
+                new com.tcs.contentGenerator.agent.design.Decor.Hero("panel", "surface", "primary"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionBand("surface"),
                 new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true),
                 new com.tcs.contentGenerator.agent.design.Decor.StatCard("surface", "primary", true),
@@ -303,6 +303,36 @@ class LayoutEngineTest {
         assertTrue(icon.frame().x() >= chip.frame().x() - EPSILON
                         && icon.frame().x() + icon.frame().w() <= chip.frame().x() + chip.frame().w() + EPSILON,
                 "the icon must be horizontally centered inside the chip");
+    }
+
+    @Test
+    void photoLedHeroPlacesAFullWidthPhotoSlotAboveTheHeadline() {
+        DesignTemplate base = editorialTemplate();
+        var decor = base.decor();
+        DesignTemplate photoLed = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                new com.tcs.contentGenerator.agent.design.Decor(decor.masthead(), decor.sectionHeader(),
+                        new com.tcs.contentGenerator.agent.design.Decor.Hero("photo-led", "surface", "primary"),
+                        decor.sectionBand(), decor.photo(), decor.statCard(), decor.footer()));
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), photoLed, "Test Issue", "job-1");
+        List<Component> firstPage = document.pages().get(0).components();
+
+        ImageBox heroPhoto = firstPage.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.IMAGE_PLACEHOLDER && box.assetId() == null)
+                .findFirst().orElseThrow(() -> new AssertionError("expected a hero photo slot"));
+        assertTrue(Math.abs(heroPhoto.frame().w() - (PAGE_WIDTH - 2 * MARGIN)) < EPSILON,
+                "hero photo is full content width");
+        TextBox heroHeadline = firstPage.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(box -> "HeroHeadline".equals(box.styleRef()))
+                .findFirst().orElseThrow();
+        assertTrue(heroHeadline.frame().y() >= heroPhoto.frame().y() + heroPhoto.frame().h() - EPSILON,
+                "the headline sits below the hero photo");
+        assertTrue(firstPage.stream().noneMatch(c -> c instanceof ImageBox box
+                        && box.assetId() != null && box.assetId().startsWith("decor-heropanel-")),
+                "photo-led hero has no panel");
     }
 
     @Test

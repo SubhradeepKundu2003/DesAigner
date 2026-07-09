@@ -1148,11 +1148,25 @@ different places + generate a test docx with images"):**
   shadowed; review 98 (one content-dependent LOW orphaned header).
   Suite **108/108**.
 
+**Photo-led hero DONE (2026-07-10, first piece of the layout-pattern
+follow-up, user-approved):** `Decor.Hero` gained `style` — `"photo-led"`
+places a full-width photo slot (210pt, empty `IMAGE_PLACEHOLDER` carrying
+the hero article's `SourceLink`, filled/removed by the existing slot
+machinery) at the top of the HERO section with headline → lead → body
+below, magazine style, no panel; anything else (incl. null = backward
+compat) keeps the panel+quote-glyph treatment. tcs-brand +
+nocturnal-corporate are photo-led; noir-luxe keeps the panel (both styles
+stay exercised); extraction emits photo-led (the references are image-led
+designs). Skipped when it wouldn't fit the current page (same orphan
+guard as section slots). Suite **109/109**; live e2e on the image docx:
+page 1 = full-width hero photo above "A Message from Leadership" —
+matches the user's TCS magazine reference layout; per-section images
+elsewhere; 0 layout findings.
+
 **Current next-step queue:** (1) replace the abstract default photos with
-real photography (drop-in, zero code); (2) layout-pattern follow-up (card
-grid, image-left/right, pull quotes, KPI tiles — see "bigger follow-up"
-above; the photo-led magazine hero from the user's TCS reference lives
-here too);
+real photography (drop-in, zero code); (2) remaining layout patterns (card
+grid, image-left/right alternation, LLM-chosen pull quotes, KPI tiles —
+see "bigger follow-up" above);
 (3) template-selection UX (per-run choice via API/UI — today the default
 is a config flip; also consider white section-icon variants so dark
 templates get real icons); (4) deeper reference learning (layout/component

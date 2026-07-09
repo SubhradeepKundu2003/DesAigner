@@ -231,7 +231,9 @@ public class StyleExtractionService {
                 new Decor.Masthead("gradient-band", mastheadFromRole, mastheadToRole, 0, 130,
                         "wave".equalsIgnoreCase(strip(description.mastheadEdge())) ? "wave" : "flat"),
                 new Decor.SectionHeader("chip", "primary", true),
-                new Decor.Hero("surface", "primary"),
+                // the reference material is image-led magazine design — hero
+                // gets the full-width photo treatment
+                new Decor.Hero("photo-led", "surface", "primary"),
                 new Decor.SectionBand("surface"),
                 new Decor.Photo(photoClip, 12, shadows),
                 new Decor.StatCard("surface", "primary", shadows),

@@ -75,6 +75,8 @@ public class LayoutEngine {
     /** Reserved photo-slot geometry (filled by Agent #8, dropped if nothing fits it). */
     private static final double PHOTO_SLOT_HEIGHT = 150;
     private static final double PHOTO_SLOT_WIDTH_FRACTION = 0.62;
+    /** Photo-led hero: full-width magazine photo above the headline. */
+    private static final double HERO_PHOTO_HEIGHT = 210;
 
     private final TextMeasurer measurer = new TextMeasurer();
 
@@ -200,7 +202,21 @@ public class LayoutEngine {
         }
         GeneratedArticle article = section.articles().get(0);
         SourceLink link = new SourceLink(section.section().title(), article.headline());
-        if (decor == null || decor.hero() == null) {
+        boolean photoLed = decor != null && decor.hero() != null
+                && "photo-led".equals(decor.hero().style());
+        if (photoLed) {
+            // magazine hero: full-width photo on top (an empty slot the graphics
+            // agent fills or removes), headline and lead below — no panel
+            if (p.fits(HERO_PHOTO_HEIGHT + PARAGRAPH_GAP)) {
+                double h = p.reserve(HERO_PHOTO_HEIGHT, "hero-photo:" + article.headline());
+                p.add(new ImageBox(p.nextId(), ComponentRole.IMAGE_PLACEHOLDER,
+                        new Frame(p.x(), p.y(), p.contentWidth(), h),
+                        0, false, link, null, section.section().title()));
+                p.advance(h);
+                p.advance(PARAGRAPH_GAP);
+            }
+        }
+        if (decor == null || decor.hero() == null || photoLed) {
             placeText(p, ComponentRole.ARTICLE_HEADLINE, "HeroHeadline", styleOf(theme, "HeroHeadline"),
                     article.headline(), link, p.contentWidth());
             p.advance(PARAGRAPH_GAP);
