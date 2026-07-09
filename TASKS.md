@@ -1063,16 +1063,35 @@ findings**, PDF visually confirmed — white title readable across the whole
 gold→dark wave band, gold chips, dark stat card with gold accent, rounded
 photo, gold footer. Suite **100/100 tests green.**
 
+**Proposed 2026-07-09, discussed with user, NOT yet approved — "editorial
+polish" package** (user's feedback: below the masthead the content zone is
+still a plain text wall): (a) hero panel behind the Leadership Message
+(tinted full-width surface card, optional quote glyph); (b) alternating
+subtle `surface` tint bands behind every other section; (c) stronger
+section headers (uppercase colored kicker label + thicker accent bar
+replacing the thin divider); (d) lead-paragraph typography (first
+paragraph of each article larger/muted). All four are decor/template
+extensions on the proven asset-baking machinery. Then as a bigger
+follow-up: card-grid layout for multi-article sections, image-left/right
+alternation (finally touches `LayoutEngine` patterns — reserves image
+space instead of scavenging gaps), LLM-chosen pull quotes (content choice
+only, geometry stays Java), multi-KPI tile rows. Also noted: source-doc
+image relevance ranking (vision description + embeddings) instead of
+first-unused; and an upload endpoint for references so extraction can be
+triggered without shell access.
+
 **Current next-step queue:** (1) per-section brand images
 (`storage/assets/<SECTION_NAME>/` — photos get the full crop/clip/shadow
-treatment automatically); (2) template-selection UX (per-run choice via
-API/UI — today the default is a config flip; also consider white
-section-icon variants so dark templates get real icons); (3) deeper
-reference learning (layout/component patterns into a persistent Design
-Knowledge Base — the ARCHITECTURE.md Pipeline 1 work; extraction now
-covers palette+typography+decor); (4) Phase 4 Angular editor; (5) Phase 5
-hardening; (6) Agents #1–#5 unit tests; (7) design API asset serve/upload
-endpoints.
+treatment automatically); (2) editorial-polish package above (pending user
+approval); (3) template-selection UX (per-run choice via API/UI — today
+the default is a config flip; also consider white section-icon variants so
+dark templates get real icons); (4) deeper reference learning
+(layout/component patterns into a persistent Design Knowledge Base — the
+ARCHITECTURE.md Pipeline 1 work; extraction now covers
+palette+typography+decor); (5) Phase 4 Angular editor (user asked about
+Figma-like feasibility 2026-07-09 — confirmed feasible, Canva-style
+single-user scope, backend contract ready); (6) Phase 5 hardening; (7)
+Agents #1–#5 unit tests; (8) design API asset serve/upload endpoints.
 
 ### Design Intelligence Platform vision v2 (refined 2026-07-05 — incorporates specialized repositories, feedback loop, versioning, constraints, pattern learning/selection split; refines `ARCHITECTURE.md`, **NOT YET APPROVED, user is verifying before any code or `ARCHITECTURE.md` changes**)
 
