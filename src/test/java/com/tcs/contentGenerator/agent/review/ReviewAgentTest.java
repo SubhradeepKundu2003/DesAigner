@@ -108,6 +108,41 @@ class ReviewAgentTest {
     }
 
     @Test
+    void doesNotFlagDecorationImagesThatBleedAndSitBehindContent() {
+        // full-bleed masthead band: outside the margins AND under the title — both exempt
+        com.tcs.contentGenerator.design.ImageBox band = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-1", ComponentRole.DECORATION, new Frame(0, 0, 300, 80), 0, true,
+                null, "decor-masthead-cmp-1", "masthead band");
+        TextBox title = new TextBox("cmp-2", ComponentRole.ISSUE_TITLE, new Frame(20, 20, 260, 40), 1, false,
+                null, "Body", "Issue title on the band");
+        PipelineContext context = contextWith(new Page("page-1", List.of(band, title)));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                        .noneMatch(f -> f.category().equals("FRAME_OVERLAP")
+                                || f.category().equals("MARGIN_VIOLATION")),
+                "decoration components must be exempt from overlap and margin lints, got "
+                        + context.getReviewReport().findings());
+    }
+
+    @Test
+    void trailingFooterDecorationDoesNotHideAnOrphanedHeader() {
+        TextBox orphan = new TextBox("cmp-1", ComponentRole.SECTION_TITLE, new Frame(20, 370, 200, 16), 0, false,
+                null, "Body", "Orphaned section title");
+        com.tcs.contentGenerator.design.ImageBox footer = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-2", ComponentRole.DECORATION, new Frame(0, 392, 300, 8), 0, true,
+                null, "decor-footer-cmp-2", "footer band");
+        PipelineContext context = contextWith(new Page("page-1", List.of(orphan, footer)));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                        .anyMatch(f -> f.category().equals("ORPHANED_HEADER")),
+                "the orphan check must look past the trailing footer decoration");
+    }
+
+    @Test
     void doesNotFlagOverlapsInvolvingDecorativeShapes() {
         ShapeBox dot = new ShapeBox("cmp-1", ComponentRole.SECTION_ICON, new Frame(20, 20, 10, 10), 0, false,
                 null, "circle", "primary");

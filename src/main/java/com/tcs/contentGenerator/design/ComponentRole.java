@@ -15,5 +15,12 @@ public enum ComponentRole {
     STAT_VALUE,
     STAT_LABEL,
     IMAGE_PLACEHOLDER,
-    LOGO
+    LOGO,
+    /**
+     * Purely decorative element (masthead band, section chip, stat card,
+     * footer band) baked as an image asset. Deliberately allowed to bleed to
+     * the page edges and sit behind content — the review agent's margin and
+     * overlap lints exempt this role.
+     */
+    DECORATION
 }

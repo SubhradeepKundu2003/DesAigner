@@ -15,6 +15,7 @@
     },
     "textStyles": {
       "IssueTitle": { "fontFamily": "Inter", "fontSizePt": 28, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 34 },
+      "IssueTitleOnBand": { "fontFamily": "Inter", "fontSizePt": 28, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 34 },
       "SectionTitle": { "fontFamily": "Inter", "fontSizePt": 16, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 20 },
       "HeroHeadline": { "fontFamily": "Inter", "fontSizePt": 20, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 25 },
       "Headline": { "fontFamily": "Inter", "fontSizePt": 13, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 17 },
@@ -23,5 +24,12 @@
       "StatLabel": { "fontFamily": "Inter", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
       "EventItem": { "fontFamily": "Inter", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
     }
+  },
+  "decor": {
+    "masthead": { "style": "gradient-band", "from": "secondary", "to": "background", "angle": 0, "heightPt": 130, "edge": "wave" },
+    "sectionHeader": { "style": "chip", "colorRole": "primary" },
+    "photo": { "clip": "ellipse", "cornerRadiusPt": 12, "shadow": true },
+    "statCard": { "fill": "surface", "accent": "primary", "shadow": true },
+    "footer": { "style": "band", "from": "primary", "to": "background" }
   }
 }

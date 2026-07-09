@@ -15,6 +15,8 @@ import javax.imageio.ImageIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.tcs.contentGenerator.agent.design.Decor;
+import com.tcs.contentGenerator.agent.design.decor.PhotoEffects;
 import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.generation.GeneratedSection;
@@ -54,10 +56,15 @@ final class ImagePlacer {
     private static final double MIN_IMAGE_HEIGHT_PT = 48;
     private static final double DEFAULT_ASPECT = 1.5;
 
+    /** Raster pixels per design-model point when baking a treated photo. */
+    private static final int TREATMENT_SCALE = 2;
+
     private final GeneratedNewsletter newsletter;
     private final List<DocumentModel> documents;
     private final StorageService storage;
     private final AssetLibrary assetLibrary;
+    private final Decor.Photo photoDecor;
+    private final String jobId;
     private final Set<String> usedSourceRefs = new HashSet<>();
     private final List<Asset> assets = new ArrayList<>();
     private final List<ImagePlacement> placements = new ArrayList<>();
@@ -65,11 +72,13 @@ final class ImagePlacer {
     private int articlesConsidered;
 
     ImagePlacer(GeneratedNewsletter newsletter, List<DocumentModel> documents, List<Asset> existingAssets,
-            StorageService storage, AssetLibrary assetLibrary) {
+            StorageService storage, AssetLibrary assetLibrary, Decor.Photo photoDecor, String jobId) {
         this.newsletter = newsletter;
         this.documents = documents;
         this.storage = storage;
         this.assetLibrary = assetLibrary;
+        this.photoDecor = photoDecor;
+        this.jobId = jobId;
         this.assets.addAll(existingAssets);
         this.sequence = new AtomicInteger(existingAssets.size());
     }
@@ -119,8 +128,8 @@ final class ImagePlacer {
     private void place(SourceLink link, ImageCandidate candidate, int[] dims, Frame frame, List<Component> additions) {
         int n = sequence.incrementAndGet();
         String assetId = "graphics-asset-" + n;
-        assets.add(new Asset(assetId, "image", candidate.storedRef(),
-                dims == null ? null : dims[0], dims == null ? null : dims[1]));
+        StoredImage image = treatedOrRaw(candidate.storedRef(), frame, n, dims);
+        assets.add(new Asset(assetId, "image", image.storedRef(), image.width(), image.height()));
         additions.add(new ImageBox("graphics-img-" + n, ComponentRole.IMAGE_PLACEHOLDER, frame, 0, false,
                 link, assetId, link.articleHeadline()));
         if (candidate.source() == ImageSource.SOURCE_DOCUMENT) {
@@ -151,6 +160,33 @@ final class ImagePlacer {
         double height = Math.min(available, anchor.w() / aspect);
         double width = height * aspect;
         return Optional.of(new Frame(anchor.x(), bottom + GAP_PT, width, height));
+    }
+
+    /**
+     * Applies the template's photo treatment (crop-to-fill + clip + shadow,
+     * baked at {@value TREATMENT_SCALE}px/pt by {@link PhotoEffects}) and
+     * stores the result under the job's {@code decor/} folder. No treatment
+     * configured — or a failed one — keeps the raw image (failure isolation:
+     * an undecodable photo degrades to its untreated self, never the run).
+     */
+    private StoredImage treatedOrRaw(String storedRef, Frame frame, int n, int[] dims) {
+        if (photoDecor == null) {
+            return new StoredImage(storedRef, dims == null ? null : dims[0], dims == null ? null : dims[1]);
+        }
+        try {
+            int outW = (int) Math.round(frame.w() * TREATMENT_SCALE);
+            int outH = (int) Math.round(frame.h() * TREATMENT_SCALE);
+            byte[] treated = PhotoEffects.treat(storage.retrieve(storedRef), outW, outH,
+                    photoDecor, photoDecor.cornerRadiusPt() * TREATMENT_SCALE);
+            String ref = storage.store("jobs/" + jobId + "/decor/photo-" + n + ".png", treated);
+            return new StoredImage(ref, outW, outH);
+        } catch (IOException | RuntimeException e) {
+            log.warn("Photo treatment failed for {} — placing the untreated image", storedRef, e);
+            return new StoredImage(storedRef, dims == null ? null : dims[0], dims == null ? null : dims[1]);
+        }
+    }
+
+    private record StoredImage(String storedRef, Integer width, Integer height) {
     }
 
     private int[] readDimensions(String storedRef) {

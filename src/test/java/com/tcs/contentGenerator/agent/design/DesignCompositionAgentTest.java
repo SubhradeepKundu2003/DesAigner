@@ -3,8 +3,11 @@ package com.tcs.contentGenerator.agent.design;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -14,18 +17,18 @@ import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.generation.GeneratedSection;
 import com.tcs.contentGenerator.agent.planning.NewsletterSection;
 import com.tcs.contentGenerator.design.Asset;
+import com.tcs.contentGenerator.design.ComponentRole;
 import com.tcs.contentGenerator.design.DesignDocument;
+import com.tcs.contentGenerator.design.ImageBox;
 import com.tcs.contentGenerator.orchestrator.PipelineContext;
 import com.tcs.contentGenerator.storage.StorageService;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Guards the brand-logo attachment: it must always be there (so the masthead's
- * {@code LOGO} ImageBox, added unconditionally in {@link LayoutEngine}, always
- * resolves an asset — falling back to the renderer's dashed placeholder is
- * expected until a real file is dropped in, but the {@link Asset} entry itself
- * must never be missing), and it must respect the same
- * {@code app.graphics.brand-assets-root} convention {@code AssetLibrary} uses.
+ * Guards the asset attachments this agent owns: the brand logo (always
+ * present, theme-aware black/white variant), section icons (present iff a
+ * file exists and the page is light), and — since the decor layer — one
+ * generated SVG asset per decoration {@code ImageBox} the layout placed.
  */
 class DesignCompositionAgentTest {
 
@@ -34,6 +37,9 @@ class DesignCompositionAgentTest {
     /** Same catalog, dark-background template active — exercises the dark-theme branches. */
     private static final TemplateCatalog DARK_TEMPLATES =
             new TemplateCatalog(JsonMapper.builder().build(), "noir-luxe");
+    /** td-classic has no decor — the pre-decor plain baseline. */
+    private static final TemplateCatalog PLAIN_TEMPLATES =
+            new TemplateCatalog(JsonMapper.builder().build(), "td-classic");
 
     private static PipelineContext contextWithNewsletter() {
         GeneratedArticle article = new GeneratedArticle("Delivery headline",
@@ -46,6 +52,12 @@ class DesignCompositionAgentTest {
         return context;
     }
 
+    private static Asset assetById(DesignDocument document, String id) {
+        return document.assets().stream().filter(a -> a.id().equals(id)).findFirst()
+                .orElseThrow(() -> new AssertionError("expected asset " + id + ", got "
+                        + document.assets().stream().map(Asset::id).toList()));
+    }
+
     @Test
     void attachesUnconditionalBrandLogoAsset() {
         DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
@@ -54,10 +66,8 @@ class DesignCompositionAgentTest {
 
         agent.execute(context);
 
-        DesignDocument document = context.getDesignDocument();
-        assertEquals(1, document.assets().size());
-        Asset logo = document.assets().get(0);
-        assertEquals(LayoutEngine.BRAND_LOGO_ASSET_ID, logo.id());
+        Asset logo = assetById(context.getDesignDocument(), LayoutEngine.BRAND_LOGO_ASSET_ID);
+        // tcs-brand's masthead band starts on secondary (TCS yellow, light) -> black logo
         assertEquals("assets/BRAND/logo_black.svg", logo.storedRef());
     }
 
@@ -69,7 +79,7 @@ class DesignCompositionAgentTest {
 
         agent.execute(context);
 
-        Asset logo = context.getDesignDocument().assets().get(0);
+        Asset logo = assetById(context.getDesignDocument(), LayoutEngine.BRAND_LOGO_ASSET_ID);
         assertEquals("custom-root/BRAND/logo_black.svg", logo.storedRef());
     }
 
@@ -97,11 +107,7 @@ class DesignCompositionAgentTest {
 
         agent.execute(context);
 
-        DesignDocument document = context.getDesignDocument();
-        assertEquals(2, document.assets().size(), "expected logo + one section icon");
-        Asset icon = document.assets().stream()
-                .filter(a -> a.id().equals("icon-DELIVERY_HIGHLIGHTS"))
-                .findFirst().orElseThrow(() -> new AssertionError("expected an icon asset for the section"));
+        Asset icon = assetById(context.getDesignDocument(), "icon-DELIVERY_HIGHLIGHTS");
         assertEquals("assets/ICONS/DELIVERY_HIGHLIGHTS.svg", icon.storedRef());
     }
 
@@ -114,7 +120,8 @@ class DesignCompositionAgentTest {
         agent.execute(context);
 
         // The newsletter only has DELIVERY_HIGHLIGHTS; the events icon is unused.
-        assertEquals(1, context.getDesignDocument().assets().size(), "only the logo should be attached");
+        assertTrue(context.getDesignDocument().assets().stream().noneMatch(a -> a.id().startsWith("icon-")),
+                "no icon asset expected for an unused section icon file");
     }
 
     @Test
@@ -125,7 +132,8 @@ class DesignCompositionAgentTest {
 
         agent.execute(context);
 
-        Asset logo = context.getDesignDocument().assets().get(0);
+        // noir-luxe's masthead starts on secondary (deep blue, dark) -> white logo
+        Asset logo = assetById(context.getDesignDocument(), LayoutEngine.BRAND_LOGO_ASSET_ID);
         assertEquals("assets/BRAND/logo_white.svg", logo.storedRef());
     }
 
@@ -137,16 +145,61 @@ class DesignCompositionAgentTest {
 
         agent.execute(context);
 
-        // the icon file exists, but black strokes are invisible on #121214 —
-        // only the logo asset must be attached
-        assertEquals(1, context.getDesignDocument().assets().size());
+        // the icon file exists, but black strokes are invisible on #121214
+        assertTrue(context.getDesignDocument().assets().stream().noneMatch(a -> a.id().startsWith("icon-")),
+                "no icon assets expected on a dark page background");
     }
 
-    /** Fake storage: {@code list} returns a fixed listing, everything else is unreachable. */
-    private record ListingStorage(List<String> refs) implements StorageService {
+    @Test
+    void everyDecorationBoxGetsAStoredSvgAsset() {
+        ListingStorage storage = new ListingStorage(List.of());
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                storage, "assets");
+        PipelineContext context = contextWithNewsletter();
+
+        agent.execute(context);
+
+        DesignDocument document = context.getDesignDocument();
+        List<ImageBox> decorations = document.pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(c -> c.role() == ComponentRole.DECORATION)
+                .map(ImageBox.class::cast)
+                .toList();
+        assertTrue(!decorations.isEmpty(), "tcs-brand has decor — expected decoration boxes");
+        for (ImageBox box : decorations) {
+            Asset asset = assetById(document, box.assetId());
+            String svg = new String(storage.stored.get(asset.storedRef()), StandardCharsets.UTF_8);
+            assertTrue(svg.startsWith("<svg"), "stored decor asset must be an SVG: " + asset.storedRef());
+            assertTrue(asset.storedRef().startsWith("jobs/job-1/decor/"),
+                    "decor assets live under the job's decor folder");
+        }
+    }
+
+    @Test
+    void plainTemplateAttachesNoDecorAssets() {
+        DesignCompositionAgent agent = new DesignCompositionAgent(PLAIN_TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of()), "assets");
+        PipelineContext context = contextWithNewsletter();
+
+        agent.execute(context);
+
+        assertEquals(1, context.getDesignDocument().assets().size(),
+                "td-classic (no decor) should attach exactly the logo asset");
+    }
+
+    /** Fake storage: {@code list} returns a fixed listing, {@code store} records, rest unreachable. */
+    private static final class ListingStorage implements StorageService {
+        private final List<String> refs;
+        final Map<String, byte[]> stored = new HashMap<>();
+
+        ListingStorage(List<String> refs) {
+            this.refs = refs;
+        }
+
         @Override
         public String store(String relativePath, byte[] content) {
-            throw new UnsupportedOperationException();
+            stored.put(relativePath, content);
+            return relativePath;
         }
 
         @Override

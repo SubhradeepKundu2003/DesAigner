@@ -15,6 +15,7 @@
     },
     "textStyles": {
       "IssueTitle": { "fontFamily": "Houschka Rounded", "fontSizePt": 28, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 34 },
+      "IssueTitleOnBand": { "fontFamily": "Houschka Rounded", "fontSizePt": 28, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 34 },
       "SectionTitle": { "fontFamily": "Houschka Rounded", "fontSizePt": 16, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 20 },
       "HeroHeadline": { "fontFamily": "Houschka Rounded", "fontSizePt": 20, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 25 },
       "Headline": { "fontFamily": "Houschka Rounded", "fontSizePt": 13, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 17 },
@@ -23,5 +24,12 @@
       "StatLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
       "EventItem": { "fontFamily": "Houschka Rounded", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
     }
+  },
+  "decor": {
+    "masthead": { "style": "gradient-band", "from": "secondary", "to": "primary", "angle": 0, "heightPt": 130, "edge": "wave" },
+    "sectionHeader": { "style": "chip", "colorRole": "primary" },
+    "photo": { "clip": "rounded", "cornerRadiusPt": 12, "shadow": true },
+    "statCard": { "fill": "surface", "accent": "secondary", "shadow": true },
+    "footer": { "style": "band", "from": "secondary", "to": "primary" }
   }
 }

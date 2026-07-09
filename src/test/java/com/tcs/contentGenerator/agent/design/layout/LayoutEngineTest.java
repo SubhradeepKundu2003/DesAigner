@@ -195,6 +195,104 @@ class LayoutEngineTest {
                 "no dot ShapeBox expected when the section has an icon asset");
     }
 
+    // ---- decor layer -----------------------------------------------------
+
+    private static DesignTemplate decorTemplate() {
+        DesignTemplate plain = fixtureTemplate();
+        return new DesignTemplate(plain.name(), plain.theme(), new com.tcs.contentGenerator.agent.design.Decor(
+                new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "wave"),
+                new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary"),
+                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true),
+                new com.tcs.contentGenerator.agent.design.Decor.StatCard("background", "primary", true),
+                new com.tcs.contentGenerator.agent.design.Decor.Footer("band", "primary", "secondary")));
+    }
+
+    @Test
+    void mastheadBandIsFirstFullWidthAndBehindTheTitle() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), decorTemplate(), "Test Issue", "job-1");
+        List<Component> firstPage = document.pages().get(0).components();
+
+        Component band = firstPage.get(0);
+        assertTrue(band instanceof ImageBox && band.role() == ComponentRole.DECORATION,
+                "the masthead band must be the first component so it paints behind everything");
+        assertTrue(((ImageBox) band).assetId().startsWith("decor-masthead-"), "band asset id");
+        assertTrue(Math.abs(band.frame().x()) < EPSILON && Math.abs(band.frame().w() - PAGE_WIDTH) < EPSILON,
+                "band must be full-bleed");
+        TextBox title = firstPage.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(box -> box.role() == ComponentRole.ISSUE_TITLE)
+                .findFirst().orElseThrow();
+        assertTrue(band.frame().h() >= title.frame().y() + title.frame().h(),
+                "band must be tall enough to contain the title");
+    }
+
+    @Test
+    void contentAfterTheMastheadStartsBelowTheBand() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), decorTemplate(), "Test Issue", "job-1");
+        List<Component> firstPage = document.pages().get(0).components();
+        double bandBottom = firstPage.get(0).frame().h();
+        firstPage.stream()
+                .filter(c -> c.role() != ComponentRole.DECORATION && c.role() != ComponentRole.LOGO
+                        && c.role() != ComponentRole.ISSUE_TITLE)
+                .forEach(c -> assertTrue(c.frame().y() >= bandBottom - EPSILON,
+                        c.id() + " (" + c.role() + ") must start below the masthead band"));
+    }
+
+    @Test
+    void everyPageEndsWithAFooterBand() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), decorTemplate(), "Test Issue", "job-1");
+        for (Page page : document.pages()) {
+            Component last = page.components().get(page.components().size() - 1);
+            assertTrue(last instanceof ImageBox box && box.assetId().startsWith("decor-footer-"),
+                    page.id() + " must end with the footer band");
+            assertTrue(Math.abs(last.frame().y() + last.frame().h() - PAGE_HEIGHT) < EPSILON,
+                    "footer must sit flush with the page bottom");
+        }
+    }
+
+    @Test
+    void statCardSitsBehindTheStatRow() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), decorTemplate(), "Test Issue", "job-1");
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        ImageBox card = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.assetId() != null && box.assetId().startsWith("decor-statcard-"))
+                .findFirst().orElseThrow(() -> new AssertionError("expected a stat card decoration"));
+        Component statValue = all.stream().filter(c -> c.role() == ComponentRole.STAT_VALUE)
+                .findFirst().orElseThrow();
+        Frame c = card.frame();
+        Frame s = statValue.frame();
+        assertTrue(s.x() >= c.x() && s.y() >= c.y()
+                        && s.x() + s.w() <= c.x() + c.w() + EPSILON
+                        && s.y() + s.h() <= c.y() + c.h() + EPSILON,
+                "the stat value must sit inside the card");
+    }
+
+    @Test
+    void chipEnclosesTheSectionIconDot() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), decorTemplate(), "Test Issue", "job-1");
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        ImageBox chip = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(box -> box.assetId() != null && box.assetId().startsWith("decor-chip-"))
+                .findFirst().orElseThrow(() -> new AssertionError("expected a section chip decoration"));
+        Component icon = all.stream().filter(c -> c.role() == ComponentRole.SECTION_ICON
+                        && c.frame().y() >= chip.frame().y() - EPSILON
+                        && c.frame().y() <= chip.frame().y() + chip.frame().h())
+                .findFirst().orElseThrow(() -> new AssertionError("expected an icon within the chip's row"));
+        assertTrue(icon.frame().x() >= chip.frame().x() - EPSILON
+                        && icon.frame().x() + icon.frame().w() <= chip.frame().x() + chip.frame().w() + EPSILON,
+                "the icon must be horizontally centered inside the chip");
+    }
+
+    @Test
+    void decorlessTemplateProducesNoDecorationComponents() {
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
+        assertTrue(document.pages().stream().flatMap(p -> p.components().stream())
+                        .noneMatch(c -> c.role() == ComponentRole.DECORATION),
+                "a template without decor must lay out exactly as before");
+    }
+
     private static boolean overlaps(Frame a, Frame b) {
         boolean separated = a.x() + a.w() <= b.x() + EPSILON
                 || b.x() + b.w() <= a.x() + EPSILON

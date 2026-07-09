@@ -4,7 +4,10 @@ import java.util.List;
 
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+
 import com.tcs.contentGenerator.agent.design.CompositionPlan;
+import com.tcs.contentGenerator.agent.design.Decor;
 import com.tcs.contentGenerator.agent.design.DesignTemplate;
 import com.tcs.contentGenerator.agent.design.SectionComposition;
 import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
@@ -13,6 +16,7 @@ import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.DesignMeta;
 import com.tcs.contentGenerator.design.Frame;
 import com.tcs.contentGenerator.design.ImageBox;
+import com.tcs.contentGenerator.design.Page;
 import com.tcs.contentGenerator.design.ShapeBox;
 import com.tcs.contentGenerator.design.SourceLink;
 import com.tcs.contentGenerator.design.TextBox;
@@ -45,13 +49,28 @@ public class LayoutEngine {
     private static final double LOGO_SIZE = 40;
     private static final double LOGO_GAP = 12;
 
+    /**
+     * Prefix marking a decoration asset id ({@code decor-<kind>-<componentId>});
+     * the composition agent finds these after layout, generates each SVG at the
+     * box's exact frame size via {@code DecorPainter}, and attaches the assets.
+     */
+    public static final String DECOR_ASSET_PREFIX = "decor-";
+    /** Extra band height beyond the measured masthead content. */
+    private static final double BAND_PADDING = 16;
+    private static final double CHIP_SIZE = 20;
+    private static final double CARD_PADDING = 12;
+    private static final double FOOTER_HEIGHT = 8;
+    /** Title style used on a masthead band when the theme defines it. */
+    private static final String ON_BAND_TITLE_STYLE = "IssueTitleOnBand";
+
     private final TextMeasurer measurer = new TextMeasurer();
 
     public DesignDocument layout(CompositionPlan plan, DesignTemplate template, String issueTitle, String jobId) {
         Theme theme = template.theme();
+        Decor decor = template.decor();
         Paginator p = new Paginator(theme);
 
-        placeMasthead(p, theme, issueTitle);
+        placeMasthead(p, theme, decor, issueTitle);
         p.advance(SECTION_GAP);
 
         List<SectionComposition> sections = plan.sections();
@@ -61,23 +80,42 @@ public class LayoutEngine {
                 placeDivider(p, theme);
                 p.advance(PARAGRAPH_GAP);
             }
-            placeSectionHeader(p, section, theme);
+            placeSectionHeader(p, section, theme, decor);
             p.advance(PARAGRAPH_GAP);
-            layoutSection(p, section, theme);
+            layoutSection(p, section, theme, decor);
             p.advance(SECTION_GAP);
         }
 
-        return new DesignDocument(1, 1, new DesignMeta(issueTitle, jobId), theme, List.of(), p.finish());
+        List<Page> pages = p.finish();
+        if (decor != null && decor.footer() != null) {
+            pages = withFooters(pages, p, theme);
+        }
+        return new DesignDocument(1, 1, new DesignMeta(issueTitle, jobId), theme, List.of(), pages);
     }
 
-    private void layoutSection(Paginator p, SectionComposition section, Theme theme) {
+    private void layoutSection(Paginator p, SectionComposition section, Theme theme, Decor decor) {
         switch (section.pattern()) {
             case HERO -> layoutHero(p, section, theme);
-            case STAT_CALLOUT -> layoutStatCallout(p, section, theme);
+            case STAT_CALLOUT -> layoutStatCallout(p, section, theme, decor);
             case EVENT_LIST -> layoutEventList(p, section, theme);
             case TWO_COLUMN -> layoutTwoColumn(p, section, theme);
             case STANDARD -> layoutStandard(p, section, theme);
         }
+    }
+
+    /** Appends the footer band to every page — drawn over empty bottom-edge space. */
+    private List<Page> withFooters(List<Page> pages, Paginator p, Theme theme) {
+        List<Page> out = new ArrayList<>();
+        for (Page page : pages) {
+            List<com.tcs.contentGenerator.design.Component> components = new ArrayList<>(page.components());
+            String id = p.nextId();
+            components.add(new ImageBox(id, ComponentRole.DECORATION,
+                    new Frame(0, theme.pageSize().heightPt() - FOOTER_HEIGHT,
+                            theme.pageSize().widthPt(), FOOTER_HEIGHT),
+                    0, true, null, DECOR_ASSET_PREFIX + "footer-" + id, "footer band"));
+            out.add(new com.tcs.contentGenerator.design.Page(page.id(), components));
+        }
+        return out;
     }
 
     private void layoutStandard(Paginator p, SectionComposition section, Theme theme) {
@@ -126,7 +164,7 @@ public class LayoutEngine {
         }
     }
 
-    private void layoutStatCallout(Paginator p, SectionComposition section, Theme theme) {
+    private void layoutStatCallout(Paginator p, SectionComposition section, Theme theme, Decor decor) {
         if (section.articles().isEmpty()) {
             return;
         }
@@ -137,18 +175,28 @@ public class LayoutEngine {
                 article.headline(), link, p.contentWidth());
         p.advance(PARAGRAPH_GAP);
 
+        boolean card = decor != null && decor.statCard() != null;
+        double pad = card ? CARD_PADDING : 0;
         TextStyle statStyle = styleOf(theme, "Stat");
         TextStyle labelStyle = styleOf(theme, "StatLabel");
-        double statWidth = p.contentWidth() * 0.35;
-        double labelWidth = p.contentWidth() - statWidth;
+        double innerWidth = p.contentWidth() - 2 * pad;
+        double statWidth = innerWidth * 0.35;
+        double labelWidth = innerWidth - statWidth;
         double statHeight = measurer.heightOf(section.statValue(), statStyle, statWidth);
         double labelHeight = measurer.heightOf(section.statLabel(), labelStyle, labelWidth);
-        double rowHeight = p.reserve(Math.max(statHeight, labelHeight), "stat-callout:" + article.headline());
+        double rowHeight = Math.max(statHeight, labelHeight);
+        double total = p.reserve(rowHeight + 2 * pad, "stat-callout:" + article.headline());
         double y = p.y();
-        addTextAt(p, p.x(), y, statWidth, rowHeight, ComponentRole.STAT_VALUE, "Stat", section.statValue(), link);
-        addTextAt(p, p.x() + statWidth, y, labelWidth, rowHeight, ComponentRole.STAT_LABEL, "StatLabel",
-                section.statLabel(), link);
-        p.advance(rowHeight);
+        if (card) {
+            String id = p.nextId();
+            p.add(new ImageBox(id, ComponentRole.DECORATION, new Frame(p.x(), y, p.contentWidth(), total),
+                    0, true, null, DECOR_ASSET_PREFIX + "statcard-" + id, "stat card"));
+        }
+        addTextAt(p, p.x() + pad, y + pad, statWidth, total - 2 * pad,
+                ComponentRole.STAT_VALUE, "Stat", section.statValue(), link);
+        addTextAt(p, p.x() + pad + statWidth, y + pad, labelWidth, total - 2 * pad,
+                ComponentRole.STAT_LABEL, "StatLabel", section.statLabel(), link);
+        p.advance(total);
         p.advance(PARAGRAPH_GAP);
 
         placeText(p, ComponentRole.ARTICLE_BODY, "Body", styleOf(theme, "Body"),
@@ -192,37 +240,62 @@ public class LayoutEngine {
                 ComponentRole.ARTICLE_BODY, "Body", article.body(), link);
     }
 
-    private void placeMasthead(Paginator p, Theme theme, String issueTitle) {
-        TextStyle style = styleOf(theme, "IssueTitle");
+    private void placeMasthead(Paginator p, Theme theme, Decor decor, String issueTitle) {
+        Decor.Masthead band = decor == null ? null : decor.masthead();
+        String titleStyleRef = band != null && theme.textStyles().containsKey(ON_BAND_TITLE_STYLE)
+                ? ON_BAND_TITLE_STYLE : "IssueTitle";
+        TextStyle style = styleOf(theme, titleStyleRef);
         double textWidth = p.contentWidth() - LOGO_SIZE - LOGO_GAP;
         double textHeight = measurer.heightOf(issueTitle, style, textWidth);
         double h = p.reserve(Math.max(textHeight, LOGO_SIZE), "masthead");
         double y = p.y();
+        double bandHeight = 0;
+        if (band != null) {
+            // full-bleed band behind the logo + title, tall enough for the content
+            bandHeight = Math.max(band.heightPt(), y + h + BAND_PADDING);
+            String id = p.nextId();
+            p.add(new ImageBox(id, ComponentRole.DECORATION,
+                    new Frame(0, 0, theme.pageSize().widthPt(), bandHeight),
+                    0, true, null, DECOR_ASSET_PREFIX + "masthead-" + id, "masthead band"));
+        }
         p.add(new ImageBox(p.nextId(), ComponentRole.LOGO, new Frame(p.x(), y, LOGO_SIZE, LOGO_SIZE),
                 0, true, null, BRAND_LOGO_ASSET_ID, "Company logo"));
         p.add(new TextBox(p.nextId(), ComponentRole.ISSUE_TITLE,
                 new Frame(p.x() + LOGO_SIZE + LOGO_GAP, y, textWidth, h), 0, false, null,
-                "IssueTitle", issueTitle));
+                titleStyleRef, issueTitle));
         p.advance(h);
+        if (bandHeight > p.y()) {
+            p.advance(bandHeight - p.y());
+        }
     }
 
-    private void placeSectionHeader(Paginator p, SectionComposition section, Theme theme) {
+    private void placeSectionHeader(Paginator p, SectionComposition section, Theme theme, Decor decor) {
         TextStyle style = styleOf(theme, "SectionTitle");
         boolean hasIconAsset = section.iconAssetId() != null;
+        boolean chip = decor != null && decor.sectionHeader() != null
+                && "chip".equals(decor.sectionHeader().style());
         double iconSize = hasIconAsset ? ICON_IMAGE_SIZE : ICON_SIZE;
-        double textWidth = p.contentWidth() - iconSize - ICON_GAP;
+        double leadSize = chip ? CHIP_SIZE : iconSize;
+        double textWidth = p.contentWidth() - leadSize - ICON_GAP;
         double textHeight = measurer.heightOf(section.section().title(), style, textWidth);
-        double h = p.reserve(Math.max(textHeight, iconSize), "section-title:" + section.section().title());
+        double h = p.reserve(Math.max(textHeight, leadSize), "section-title:" + section.section().title());
         double y = p.y();
+        if (chip) {
+            String id = p.nextId();
+            p.add(new ImageBox(id, ComponentRole.DECORATION, new Frame(p.x(), y, CHIP_SIZE, CHIP_SIZE),
+                    0, true, null, DECOR_ASSET_PREFIX + "chip-" + id, "section chip"));
+        }
+        double iconX = p.x() + (leadSize - iconSize) / 2;
+        double iconY = y + (leadSize - iconSize) / 2;
         if (hasIconAsset) {
-            p.add(new ImageBox(p.nextId(), ComponentRole.SECTION_ICON, new Frame(p.x(), y, iconSize, iconSize),
+            p.add(new ImageBox(p.nextId(), ComponentRole.SECTION_ICON, new Frame(iconX, iconY, iconSize, iconSize),
                     0, true, null, section.iconAssetId(), section.section().title() + " icon"));
         } else {
-            p.add(new ShapeBox(p.nextId(), ComponentRole.SECTION_ICON, new Frame(p.x(), y, iconSize, iconSize),
+            p.add(new ShapeBox(p.nextId(), ComponentRole.SECTION_ICON, new Frame(iconX, iconY, iconSize, iconSize),
                     0, false, null, "circle", section.iconColorRole()));
         }
         p.add(new TextBox(p.nextId(), ComponentRole.SECTION_TITLE,
-                new Frame(p.x() + iconSize + ICON_GAP, y, textWidth, h), 0, false, null,
+                new Frame(p.x() + leadSize + ICON_GAP, y, textWidth, h), 0, false, null,
                 "SectionTitle", section.section().title()));
         p.advance(h);
     }

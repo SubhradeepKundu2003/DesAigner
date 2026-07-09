@@ -1,4 +1,4 @@
-package com.tcs.contentGenerator.agent.graphics;
+﻿package com.tcs.contentGenerator.agent.graphics;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,6 +52,11 @@ import com.tcs.contentGenerator.storage.StorageService;
  */
 class ImageGraphicsAgentTest {
 
+    /** td-classic has no decor, so photos stay untreated — the behavior under test here. */
+    private static final com.tcs.contentGenerator.agent.design.TemplateCatalog PLAIN_TEMPLATES =
+            new com.tcs.contentGenerator.agent.design.TemplateCatalog(
+                    tools.jackson.databind.json.JsonMapper.builder().build(), "td-classic");
+
     private static final Theme THEME = new Theme(
             new PageSize(300, 400), Map.of(), Map.of(), new Spacing(20, 8));
     private static final SourceLink LINK = new SourceLink("Delivery Highlights", "NPS climbs to 72");
@@ -72,7 +77,7 @@ class ImageGraphicsAgentTest {
         byte[] png = tinyPng(4, 2);
         StorageService storage = new FakeStorageService(Map.of("jobs/job-1/images/photo.png", png), Map.of());
 
-        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets")).execute(context);
+        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets"), PLAIN_TEMPLATES).execute(context);
 
         DesignDocument result = context.getDesignDocument();
         List<Component> components = result.pages().get(0).components();
@@ -108,7 +113,7 @@ class ImageGraphicsAgentTest {
                 Map.of("assets/DELIVERY_HIGHLIGHTS/logo.png", png),
                 Map.of("assets/DELIVERY_HIGHLIGHTS", List.of("assets/DELIVERY_HIGHLIGHTS/logo.png")));
 
-        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets")).execute(context);
+        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets"), PLAIN_TEMPLATES).execute(context);
 
         GraphicsReport report = context.getGraphicsReport();
         assertEquals(1, report.imagesPlaced());
@@ -130,7 +135,7 @@ class ImageGraphicsAgentTest {
         PipelineContext context = contextWith(document, newsletter, List.of());
 
         StorageService storage = new FakeStorageService(Map.of(), Map.of());
-        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets")).execute(context);
+        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets"), PLAIN_TEMPLATES).execute(context);
 
         assertEquals(2, context.getDesignDocument().pages().get(0).components().size());
         assertEquals(0, context.getGraphicsReport().imagesPlaced());
@@ -148,7 +153,7 @@ class ImageGraphicsAgentTest {
         PipelineContext context = contextWith(document, newsletter, List.of());
 
         StorageService storage = new FakeStorageService(Map.of(), Map.of());
-        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets")).execute(context);
+        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets"), PLAIN_TEMPLATES).execute(context);
 
         assertEquals(1, context.getDesignDocument().pages().get(0).components().size());
         assertEquals(0, context.getGraphicsReport().imagesPlaced());
@@ -178,7 +183,7 @@ class ImageGraphicsAgentTest {
         PlannedItem planned = new PlannedItem(item, 9, "strong quarter");
         GeneratedArticle article = new GeneratedArticle("NPS climbs to 72",
                 "NPS reached 72 this quarter across 120 accounts.", planned);
-        return new GeneratedNewsletter("TD Monthly — July 2026",
+        return new GeneratedNewsletter("TD Monthly â€” July 2026",
                 List.of(new GeneratedSection(NewsletterSection.DELIVERY_HIGHLIGHTS, List.of(article))));
     }
 

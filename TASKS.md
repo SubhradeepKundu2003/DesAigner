@@ -945,12 +945,92 @@ callout, brand-asset image. Suite **78/78** green (TemplateCatalogTest
 extended to all templates + configurable/unknown default;
 DesignCompositionAgentTest + white-logo and dark-skips-icons tests).
 
+**Decor layer DONE (2026-07-09, user-approved plan at
+`~/.claude/plans/graceful-seeking-babbage.md`): built, unit-tested,
+verified live e2e on both decorated templates.** The user's "where is the
+design?" gap — no gradients, no shaped/shadowed images, flat pages — is
+closed with a **template-driven decoration vocabulary**, all placement
+still deterministic Java, LLM still never touches geometry.
+
+**Decor facts:**
+- **Strategy (probed first, drives everything): decorations are baked into
+  assets at composition time — zero renderer changes.** POI XSLF has NO
+  gradient/shadow writers (`setFillColor` only, `getShadow` read-only);
+  openhtmltopdf 1.1.40 HAS `linear-gradient` + border-radius but no
+  box-shadow/clip-path/object-fit. Flat decorations (masthead band, chips,
+  stat cards, footer) are deterministic **SVG strings** (vector in
+  HTML/PDF, Batik-rasterized for PPTX — the proven logo/icon path); photo
+  treatment is **Java2D → PNG** (`crop-to-fill + ellipse/rounded clip +
+  soft shadow baked in`). Shadow filter uses the classic
+  `feGaussianBlur`+`feOffset`+`feMerge` chain (NOT `feDropShadow` — Batik
+  reliability).
+- `DesignTemplate` gained an optional `decor` (nested records in
+  `agent/design/Decor.java`: Masthead/SectionHeader/Photo/StatCard/Footer;
+  convenience 2-arg ctor keeps old callers). All decor colors are theme
+  **role names**. `td-classic` has no decor — the regression baseline
+  (guarded by tests: no DECORATION components, exactly 1 asset).
+- New `agent/design/decor/`: `DecorPainter` (pure spec+theme+size → SVG
+  string) and `PhotoEffects` (Java2D; **shadow margin lives INSIDE the
+  output canvas** so ImagePlacer's frame math is untouched; margin must
+  exceed offset+blur or the shadow clips — found by a failing pixel test,
+  min bumped 6→10px; `ConvolveOp` EDGE_NO_OP leaves a ~kernel-radius
+  unblurred edge zone — sample test pixels away from edges).
+- `LayoutEngine`: places DECORATION `ImageBox`es under well-known asset
+  ids `decor-<kind>-<cmpId>` (`DECOR_ASSET_PREFIX`); masthead band is
+  full-bleed, **first in the component list** (paint order = list order),
+  sized `max(spec heightPt, measured masthead + 16pt)`, cursor pushed
+  below it; issue title switches to the `IssueTitleOnBand` text style
+  when the theme defines it; chips (20pt rounded tint) center the
+  icon/dot inside; stat card wraps the stat row with 12pt padding;
+  footer band appended to every page post-`finish()`.
+- `DesignCompositionAgent`: after layout, walks DECORATION boxes, parses
+  the kind from the asset id, generates each SVG at the box's exact frame
+  size, stores under `jobs/{jobId}/decor/`, attaches Assets. **Logo
+  variant now picks against the masthead band's `from` color when a band
+  exists** (tcs-brand: yellow → black logo; noir-luxe: blue → white),
+  else the page background as before. Old private `isDark` promoted to
+  shared `design/Colors.isDark`.
+- `ImagePlacer` (+`ImageGraphicsAgent` gained `TemplateCatalog`): when
+  the template has photo decor, the placed image is treated at 2px/pt and
+  stored as `jobs/{jobId}/decor/photo-<n>.png`; treatment failure falls
+  back to the raw image (isolation).
+- `LayoutLint`: DECORATION exempt from margin (full-bleed by design) and
+  overlap (sits behind content) lints; **orphaned-header check now skips
+  trailing decorations** (the footer band is appended last — without this
+  the check silently died).
+- Templates: tcs-brand = yellow→blue wave masthead (black title/logo on
+  the yellow side), blue chips, rounded+shadow photos, surface stat card
+  with yellow accent, footer strip. noir-luxe = deep-blue→black wave
+  masthead (white title/logo), gold chips, **ellipse+shadow photos** (the
+  user's explicit ask), gold-accent stat card, gold footer. Both gained
+  the `IssueTitleOnBand` style; `TemplateCatalogTest` now checks required
+  style keys via containsAll (extras allowed).
+- Tests: `DecorPainterTest` (Batik-rasterization guard — same pattern as
+  `SectionIconAssetsTest`), `PhotoEffectsTest` (pixel assertions: exact
+  dims, transparent ellipse corners, translucent shadow, centered crop,
+  undecodable → IOException), decor additions to `LayoutEngineTest` (band
+  first/full-bleed/contains title, content below band, footer on every
+  page, stat inside card, icon inside chip, decor-less unchanged),
+  `DesignCompositionAgentTest` (every DECORATION box gets a stored SVG
+  asset under the job's decor folder; plain template attaches none),
+  `ReviewAgentTest` (decoration exemptions + orphan-past-footer).
+  **Suite 97/97 green.**
+- Live e2e (booted 8096, small sample, both templates): review 100/100,
+  0 layout findings on both; all three formats exported valid; PDFs
+  visually inspected — both look genuinely designed (gradient wave
+  masthead, chips, shadowed stat card, treated photo, footer strip).
+  Fact-validation HIGH flags blocked export on one run (normal variance)
+  — resolved via the flags API, then exported.
+
 **Current next-step queue:** (1) per-section brand images
-(`storage/assets/<SECTION_NAME>/`); (2) template-selection UX (per-run
-choice via API/UI — today the default is a config flip; also consider
-white section-icon variants so dark templates get real icons); (3)
-Phase 4 Angular editor; (4) Phase 5 hardening; (5) Agents #1–#5 unit
-tests; (6) design API asset serve/upload endpoints.
+(`storage/assets/<SECTION_NAME>/` — now doubly worth it: photos get the
+full crop/clip/shadow treatment automatically); (2) template-selection UX
+(per-run choice via API/UI — today the default is a config flip; also
+consider white section-icon variants so dark templates get real icons);
+(3) style extraction emitting decor specs from reference PDFs (the
+vocabulary now exists to extract into); (4) Phase 4 Angular editor; (5)
+Phase 5 hardening; (6) Agents #1–#5 unit tests; (7) design API asset
+serve/upload endpoints.
 
 ### Design Intelligence Platform vision v2 (refined 2026-07-05 — incorporates specialized repositories, feedback loop, versioning, constraints, pattern learning/selection split; refines `ARCHITECTURE.md`, **NOT YET APPROVED, user is verifying before any code or `ARCHITECTURE.md` changes**)
 

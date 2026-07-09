@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import com.tcs.contentGenerator.agent.design.DesignTemplate;
+import com.tcs.contentGenerator.agent.design.TemplateCatalog;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.Page;
 import com.tcs.contentGenerator.orchestrator.Agent;
@@ -32,10 +34,12 @@ public class ImageGraphicsAgent implements Agent {
 
     private final StorageService storage;
     private final AssetLibrary assetLibrary;
+    private final TemplateCatalog templates;
 
-    public ImageGraphicsAgent(StorageService storage, AssetLibrary assetLibrary) {
+    public ImageGraphicsAgent(StorageService storage, AssetLibrary assetLibrary, TemplateCatalog templates) {
         this.storage = storage;
         this.assetLibrary = assetLibrary;
+        this.templates = templates;
     }
 
     @Override
@@ -51,8 +55,12 @@ public class ImageGraphicsAgent implements Agent {
             return;
         }
 
+        // Same template the composition agent laid the design out with; its
+        // photo decor (if any) drives crop/clip/shadow treatment.
+        DesignTemplate template = templates.getDefault();
         ImagePlacer placer = new ImagePlacer(context.getGeneratedNewsletter(), context.getDocuments(),
-                document.assets(), storage, assetLibrary);
+                document.assets(), storage, assetLibrary,
+                template.decor() == null ? null : template.decor().photo(), context.getJobId());
         List<Page> pages = document.pages().stream()
                 .map(page -> placer.enrichPage(page, document.theme()))
                 .toList();

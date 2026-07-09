@@ -76,6 +76,10 @@ public class LayoutLint {
         double pageWidth = theme.pageSize().widthPt();
         double pageHeight = theme.pageSize().heightPt();
         for (Component c : components) {
+            if (c.role() == ComponentRole.DECORATION) {
+                // decorations (masthead/footer bands) bleed to the page edges by design
+                continue;
+            }
             Frame f = c.frame();
             boolean violates = f.x() < margin - marginTolerancePt
                     || f.y() < margin - marginTolerancePt
@@ -92,18 +96,20 @@ public class LayoutLint {
     /**
      * Pairwise overlap check, skipping any pair involving a {@link ShapeBox} —
      * dividers and section-icon dots are routinely placed behind or beside
-     * text/images by design, so flagging those would just be noise.
+     * text/images by design, so flagging those would just be noise. Components
+     * with role {@code DECORATION} (masthead band, chips, stat card, footer)
+     * are exempt for the same reason: they intentionally sit behind content.
      */
     private List<ReviewFinding> checkOverlaps(List<Component> components) {
         List<ReviewFinding> out = new ArrayList<>();
         for (int i = 0; i < components.size(); i++) {
             Component a = components.get(i);
-            if (a instanceof ShapeBox) {
+            if (a instanceof ShapeBox || a.role() == ComponentRole.DECORATION) {
                 continue;
             }
             for (int j = i + 1; j < components.size(); j++) {
                 Component b = components.get(j);
-                if (b instanceof ShapeBox) {
+                if (b instanceof ShapeBox || b.role() == ComponentRole.DECORATION) {
                     continue;
                 }
                 if (overlaps(a.frame(), b.frame())) {
@@ -139,10 +145,14 @@ public class LayoutLint {
 
     /** A section title left as the last thing on a page has had its content pushed to the next page. */
     private List<ReviewFinding> checkOrphanedHeader(List<Component> components, Theme theme) {
-        if (components.isEmpty()) {
-            return List.of();
+        // trailing decorations (the footer band is appended last) don't count as content
+        Component last = null;
+        for (int i = components.size() - 1; i >= 0; i--) {
+            if (components.get(i).role() != ComponentRole.DECORATION) {
+                last = components.get(i);
+                break;
+            }
         }
-        Component last = components.get(components.size() - 1);
         if (!(last instanceof TextBox box) || box.role() != ComponentRole.SECTION_TITLE) {
             return List.of();
         }

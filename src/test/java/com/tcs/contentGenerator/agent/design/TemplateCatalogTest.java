@@ -3,6 +3,7 @@ package com.tcs.contentGenerator.agent.design;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
 
@@ -64,7 +65,10 @@ class TemplateCatalogTest {
     void everyTemplateDefinesAllRequiredTextStyleKeys() {
         for (String name : ALL_TEMPLATES) {
             Theme theme = catalog.get(name).theme();
-            assertEquals(REQUIRED_TEXT_STYLES, theme.textStyles().keySet(), name);
+            // containsAll, not equals: templates may add optional styles
+            // (e.g. IssueTitleOnBand for the decor masthead)
+            assertTrue(theme.textStyles().keySet().containsAll(REQUIRED_TEXT_STYLES),
+                    name + " is missing required styles");
         }
     }
 
