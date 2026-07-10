@@ -86,6 +86,9 @@
         "colorRole" : "muted",
         "lineHeightPt" : 16.0
       },
+      "CoverTitle" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 34.0, "fontWeight" : "normal", "colorRole" : "text", "lineHeightPt" : 40.0, "align" : "right" },
+      "CoverTitleAccent" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 40.0, "fontWeight" : "bold", "colorRole" : "primary", "lineHeightPt" : 46.0, "align" : "right" },
+      "CoverSubtitle" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 11.0, "fontWeight" : "normal", "colorRole" : "muted", "lineHeightPt" : 15.0, "align" : "right" },
       "SectionTitleKicker" : {
         "fontFamily" : "Helvetica Neue",
         "fontSizePt" : 15.0,
@@ -100,6 +103,7 @@
     }
   },
   "decor" : {
+    "cover" : { "fill" : "background", "titleAccent" : "primary" },
     "masthead" : {
       "style" : "gradient-band",
       "from" : "primary",

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.tcs.contentGenerator.agent.design.Decor;
 import com.tcs.contentGenerator.agent.design.DesignTemplate;
 import com.tcs.contentGenerator.agent.design.TemplateCatalog;
+import com.tcs.contentGenerator.design.Colors;
 import com.tcs.contentGenerator.design.TextStyle;
 import com.tcs.contentGenerator.design.Theme;
 import com.tcs.contentGenerator.llm.LlmClient;
@@ -227,7 +228,26 @@ public class StyleExtractionService {
             case "rounded" -> "rounded";
             default -> "none";
         };
+        // cover: always the dark face of the theme, title in whichever base
+        // color contrasts best with it, subtitle muted only if it stays legible
+        String coverFillRole = Colors.isDark(background) ? "background" : "text";
+        String coverFillHex = colors.get(coverFillRole);
+        String coverTitleRole = contrastRatio(colors.get("text"), coverFillHex)
+                >= contrastRatio(colors.get("background"), coverFillHex) ? "text" : "background";
+        String coverSubtitleRole = contrastRatio(colors.get("muted"), coverFillHex) >= MIN_TEXT_CONTRAST
+                ? "muted" : coverTitleRole;
+        TextStyle coverBase = textStyles.get("IssueTitle");
+        if (coverBase != null) {
+            textStyles.put("CoverTitle", new TextStyle(coverBase.fontFamily(), 34, "normal",
+                    coverTitleRole, 40, "right"));
+            textStyles.put("CoverTitleAccent", new TextStyle(coverBase.fontFamily(), 40, "bold",
+                    "primary", 46, "right"));
+            textStyles.put("CoverSubtitle", new TextStyle(coverBase.fontFamily(), 11, "normal",
+                    coverSubtitleRole, 15, "right"));
+        }
+
         Decor decor = new Decor(
+                new Decor.Cover(coverFillRole, "primary"),
                 new Decor.Masthead("gradient-band", mastheadFromRole, mastheadToRole, 0, 130,
                         "wave".equalsIgnoreCase(strip(description.mastheadEdge())) ? "wave" : "flat"),
                 new Decor.SectionHeader("chip", "primary", true),

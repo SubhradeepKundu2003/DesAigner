@@ -36,6 +36,11 @@ public class Paginator {
         y = margin;
     }
 
+    /** Explicitly starts a fresh page (e.g. content after a dedicated cover page). */
+    public void newPage() {
+        startPage();
+    }
+
     public double x() {
         return margin;
     }

@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 import com.tcs.contentGenerator.agent.design.CompositionPlan;
 import com.tcs.contentGenerator.agent.design.Decor;
@@ -81,6 +82,12 @@ public class LayoutEngine {
     private static final double SIDE_IMAGE_WIDTH_FRACTION = 0.36;
     private static final double SIDE_IMAGE_MIN_HEIGHT = 100;
     private static final double SIDE_IMAGE_MAX_HEIGHT = 190;
+    /** Cover asset id for the logo variant picked against the cover fill. */
+    public static final String COVER_LOGO_ASSET_ID = "brand-logo-cover";
+    /** Cover display styles — used when the theme defines them. */
+    private static final String COVER_TITLE_STYLE = "CoverTitle";
+    private static final String COVER_TITLE_ACCENT_STYLE = "CoverTitleAccent";
+    private static final String COVER_SUBTITLE_STYLE = "CoverSubtitle";
 
     private final TextMeasurer measurer = new TextMeasurer();
 
@@ -89,6 +96,12 @@ public class LayoutEngine {
         Decor decor = template.decor();
         Paginator p = new Paginator(theme);
 
+        boolean hasCover = decor != null && decor.cover() != null;
+        if (hasCover) {
+            placeCover(p, theme, decor.cover(), issueTitle,
+                    plan.sections().isEmpty() ? null : plan.sections().get(0));
+            p.newPage();
+        }
         placeMasthead(p, theme, decor, issueTitle);
         p.advance(SECTION_GAP);
 
@@ -125,9 +138,78 @@ public class LayoutEngine {
 
         List<Page> pages = p.finish();
         if (decor != null && decor.footer() != null) {
-            pages = withFooters(pages, p, theme);
+            pages = withFooters(pages, p, theme, hasCover);
         }
         return new DesignDocument(1, 1, new DesignMeta(issueTitle, jobId), theme, List.of(), pages);
+    }
+
+    /**
+     * Dedicated magazine cover: full-bleed fill, brand logo top-left, a large
+     * rounded photo (an empty DECORATION slot — it may bleed past the margins —
+     * that the graphics agent fills with the lead section's image), the issue
+     * title split into a right-aligned display block ("TD Monthly" /
+     * "NEWSLETTER" in the accent style / the issue date as subtitle), and a
+     * decorative wave band along the bottom edge.
+     */
+    private void placeCover(Paginator p, Theme theme, Decor.Cover cover, String issueTitle,
+            SectionComposition leadSection) {
+        double pageW = theme.pageSize().widthPt();
+        double pageH = theme.pageSize().heightPt();
+        double margin = theme.spacing().marginPt();
+
+        p.add(new ShapeBox(p.nextId(), ComponentRole.DECORATION, new Frame(0, 0, pageW, pageH),
+                0, true, null, "rect", cover.fill()));
+        p.add(new ImageBox(p.nextId(), ComponentRole.LOGO, new Frame(margin, margin, 46, 46),
+                0, true, null, COVER_LOGO_ASSET_ID, "Company logo"));
+
+        SourceLink link = leadSection == null || leadSection.articles().isEmpty() ? null
+                : new SourceLink(leadSection.section().title(), leadSection.articles().get(0).headline());
+        if (link != null) {
+            p.add(new ImageBox(p.nextId(), ComponentRole.DECORATION,
+                    new Frame(0, margin + 72, pageW * 0.86, pageH * 0.4), 0, false, link, null, "cover photo"));
+        }
+
+        // "TD Monthly Newsletter — July 2026" → "TD Monthly" / "NEWSLETTER" / "July 2026"
+        String main = issueTitle;
+        String subtitle = null;
+        int dash = issueTitle.indexOf('—') >= 0 ? issueTitle.indexOf('—') : issueTitle.indexOf(" - ");
+        if (dash > 0) {
+            main = issueTitle.substring(0, dash).strip();
+            subtitle = issueTitle.substring(dash + 1).strip();
+        }
+        String accentLine = null;
+        if (main.toLowerCase(Locale.ROOT).endsWith("newsletter")) {
+            accentLine = "NEWSLETTER";
+            main = main.substring(0, main.length() - "newsletter".length()).strip();
+        }
+
+        TextStyle titleStyle = styleOf(theme, COVER_TITLE_STYLE);
+        double y = margin + 72 + pageH * 0.4 + 48;
+        double titleH = measurer.heightOf(main, titleStyle, p.contentWidth());
+        p.add(new TextBox(p.nextId(), ComponentRole.ISSUE_TITLE,
+                new Frame(margin, y, p.contentWidth(), titleH), 0, false, null, COVER_TITLE_STYLE, main));
+        y += titleH + 2;
+        if (accentLine != null) {
+            TextStyle accentStyle = styleOf(theme, COVER_TITLE_ACCENT_STYLE);
+            double accentH = measurer.heightOf(accentLine, accentStyle, p.contentWidth());
+            p.add(new TextBox(p.nextId(), ComponentRole.ISSUE_TITLE,
+                    new Frame(margin, y, p.contentWidth(), accentH), 0, false, null,
+                    COVER_TITLE_ACCENT_STYLE, accentLine));
+            y += accentH + 10;
+        }
+        if (subtitle != null && !subtitle.isBlank()) {
+            TextStyle subStyle = styleOf(theme, COVER_SUBTITLE_STYLE);
+            double subW = p.contentWidth() * 0.7;
+            double subH = measurer.heightOf(subtitle, subStyle, subW);
+            p.add(new TextBox(p.nextId(), ComponentRole.ISSUE_TITLE,
+                    new Frame(margin + p.contentWidth() - subW, y, subW, subH), 0, false, null,
+                    COVER_SUBTITLE_STYLE, subtitle));
+        }
+
+        String wavesId = p.nextId();
+        p.add(new ImageBox(wavesId, ComponentRole.DECORATION,
+                new Frame(0, pageH - 120, pageW, 120), 0, true, null,
+                DECOR_ASSET_PREFIX + "coverwaves-" + wavesId, "wave band"));
     }
 
     private void layoutSection(Paginator p, SectionComposition section, Theme theme, Decor decor,
@@ -226,10 +308,15 @@ public class LayoutEngine {
         p.advance(h);
     }
 
-    /** Appends the footer band to every page — drawn over empty bottom-edge space. */
-    private List<Page> withFooters(List<Page> pages, Paginator p, Theme theme) {
+    /** Appends the footer band to every page (the cover carries its own wave band instead). */
+    private List<Page> withFooters(List<Page> pages, Paginator p, Theme theme, boolean skipFirst) {
         List<Page> out = new ArrayList<>();
-        for (Page page : pages) {
+        for (int i = 0; i < pages.size(); i++) {
+            Page page = pages.get(i);
+            if (skipFirst && i == 0) {
+                out.add(page);
+                continue;
+            }
             List<com.tcs.contentGenerator.design.Component> components = new ArrayList<>(page.components());
             String id = p.nextId();
             components.add(new ImageBox(id, ComponentRole.DECORATION,

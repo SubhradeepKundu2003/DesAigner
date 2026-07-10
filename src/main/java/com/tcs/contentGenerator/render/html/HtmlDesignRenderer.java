@@ -98,7 +98,8 @@ public class HtmlDesignRenderer implements DesignRenderer {
         String css = frameCss(box.frame())
                 + "font-family:" + fontFamilyCss(style.fontFamily()) + ";font-size:" + style.fontSizePt() + "pt;"
                 + "font-weight:" + style.fontWeight() + ";color:" + colorOf(theme, style.colorRole(), "#000") + ";"
-                + "line-height:" + style.lineHeightPt() + "pt;white-space:pre-wrap;overflow:hidden;";
+                + "line-height:" + style.lineHeightPt() + "pt;white-space:pre-wrap;overflow:hidden;"
+                + (style.align() != null ? "text-align:" + style.align() + ";" : "");
         html.append("<div class=\"cmp\" style=\"").append(css).append("\">")
                 .append(escape(box.text())).append("</div>");
     }

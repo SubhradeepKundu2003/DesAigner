@@ -12,8 +12,20 @@ package com.tcs.contentGenerator.agent.design;
  * PPTX writer has no gradient/shadow API and openhtmltopdf has no
  * box-shadow/clip — the renderers stay unchanged.
  */
-public record Decor(Masthead masthead, SectionHeader sectionHeader, Hero hero,
+public record Decor(Cover cover, Masthead masthead, SectionHeader sectionHeader, Hero hero,
         SectionBand sectionBand, Photo photo, StatCard statCard, Footer footer) {
+
+    /**
+     * Dedicated magazine cover as page 1: full-bleed {@code fill} background,
+     * the brand logo (variant picked against the fill), a large rounded photo,
+     * a right-aligned display title with its second line in
+     * {@code titleAccent}, and a decorative wave-lines band along the bottom.
+     * Uses the optional {@code CoverTitle}/{@code CoverTitleAccent}/
+     * {@code CoverSubtitle} text styles. Null = no cover (content starts on
+     * page 1 as before).
+     */
+    public record Cover(String fill, String titleAccent) {
+    }
 
     /**
      * Full-bleed gradient band behind the logo + issue title. {@code angle} 0 =

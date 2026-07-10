@@ -1181,10 +1181,35 @@ can orphan at a page bottom when the next side-image row doesn't fit
 (review flags it LOW — a keep-with-next pagination improvement would
 retire it).
 
+**Cover page DONE (2026-07-10, user supplied a TCS cover mock: "let the
+first page look like this"):** `Decor.Cover(fill, titleAccent)` produces a
+dedicated magazine cover as page 1 — full-bleed fill (DECORATION ShapeBox,
+contrast-lintable), brand logo top-left as a SECOND asset
+(`brand-logo-cover`, black/white variant picked against the cover fill —
+independent of the masthead logo), a large photo slot (**DECORATION role
+so it may bleed past margins**; `ImagePlacer.fillSlots` extended to fill
+empty DECORATION ImageBoxes with a SourceLink), the issue title split
+deterministically ("TD Monthly Newsletter — July 2026" → "TD Monthly" /
+"NEWSLETTER" in the accent style / "July 2026" subtitle, right-aligned),
+and a `DecorPainter.waveLines` band (7 cubic strokes alternating
+primary/secondary at varying opacity) along the bottom. The page footer
+band skips the cover. **`TextStyle` gained an optional `align`**
+("right"/"center", null = left; convenience 5-arg ctor keeps every
+existing call site) — the first renderer change since the decor layer:
+HTML emits `text-align`, PPTX sets paragraph alignment, PDF inherits from
+HTML. New optional styles `CoverTitle`/`CoverTitleAccent`/`CoverSubtitle`.
+tcs-brand (fill `text` black, accent yellow) + nocturnal-corporate (fill
+`background`, accent gold) have covers; noir-luxe stays coverless;
+extraction emits a cover (fill = the theme's dark face, title color by
+contrast, subtitle muted only if legible). Suite **111/111**; live e2e:
+page 1 visually matches the user's mock (black page, white logo, rounded
+photo, white/gold right-aligned display title, wave band).
+
 **Current next-step queue:** (1) replace the abstract default photos with
 real photography (drop-in, zero code); (2) remaining layout patterns (card
 grid, LLM-chosen pull quotes, KPI tiles) + keep-with-next pagination for
-section headers;
+section headers + avoid near-empty trailing pages (last events bullet
+spilled to page 5 in the cover run);
 (3) template-selection UX (per-run choice via API/UI — today the default
 is a config flip; also consider white section-icon variants so dark
 templates get real icons); (4) deeper reference learning (layout/component

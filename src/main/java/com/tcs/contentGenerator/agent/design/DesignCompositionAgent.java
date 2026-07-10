@@ -104,6 +104,13 @@ public class DesignCompositionAgent implements Agent {
         assets.add(new Asset(LayoutEngine.BRAND_LOGO_ASSET_ID, "image",
                 brandAssetsRoot + "/" + BRAND_LOGO_FOLDER + "/"
                         + (Colors.isDark(logoBackdrop) ? BRAND_LOGO_DARK_BG : BRAND_LOGO_LIGHT_BG), null, null));
+        if (template.decor() != null && template.decor().cover() != null) {
+            // the cover's logo sits on the cover fill, not the page/masthead backdrop
+            String coverFill = template.theme().colors().get(template.decor().cover().fill());
+            assets.add(new Asset(LayoutEngine.COVER_LOGO_ASSET_ID, "image",
+                    brandAssetsRoot + "/" + BRAND_LOGO_FOLDER + "/"
+                            + (Colors.isDark(coverFill) ? BRAND_LOGO_DARK_BG : BRAND_LOGO_LIGHT_BG), null, null));
+        }
         for (SectionComposition section : sections) {
             if (section.iconAssetId() != null) {
                 assets.add(new Asset(section.iconAssetId(), "image", iconRefs.get(section.section()), null, null));
@@ -201,6 +208,8 @@ public class DesignCompositionAgent implements Agent {
                     case "statcard" -> DecorPainter.statCard(decor.statCard(), template.theme(),
                             box.frame().w(), box.frame().h());
                     case "footer" -> DecorPainter.footer(decor.footer(), template.theme(),
+                            box.frame().w(), box.frame().h());
+                    case "coverwaves" -> DecorPainter.waveLines(template.theme(),
                             box.frame().w(), box.frame().h());
                     default -> null;
                 };

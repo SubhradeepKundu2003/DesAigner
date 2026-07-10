@@ -160,10 +160,15 @@ class DesignCompositionAgentTest {
         agent.execute(context);
 
         DesignDocument document = context.getDesignDocument();
+        // DECORATION ShapeBoxes (cover background, tint bands) and empty photo
+        // slots (assetId null, filled later by the graphics agent) need no
+        // generated asset — only decor-* ImageBoxes do
         List<ImageBox> decorations = document.pages().stream()
                 .flatMap(p -> p.components().stream())
                 .filter(c -> c.role() == ComponentRole.DECORATION)
+                .filter(ImageBox.class::isInstance)
                 .map(ImageBox.class::cast)
+                .filter(box -> box.assetId() != null)
                 .toList();
         assertTrue(!decorations.isEmpty(), "tcs-brand has decor — expected decoration boxes");
         for (ImageBox box : decorations) {

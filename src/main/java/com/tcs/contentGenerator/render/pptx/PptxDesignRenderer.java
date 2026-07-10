@@ -115,6 +115,11 @@ public class PptxDesignRenderer implements DesignRenderer {
         String[] lines = text.split("\n", -1);
         for (String line : lines) {
             XSLFTextParagraph paragraph = shape.addNewTextParagraph();
+            if ("right".equals(style.align())) {
+                paragraph.setTextAlign(TextAlign.RIGHT);
+            } else if ("center".equals(style.align())) {
+                paragraph.setTextAlign(TextAlign.CENTER);
+            }
             XSLFTextRun run = paragraph.addNewTextRun();
             run.setText(line);
             applyStyle(run, style, theme);

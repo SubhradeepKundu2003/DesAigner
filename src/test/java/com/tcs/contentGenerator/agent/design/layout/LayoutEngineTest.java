@@ -199,7 +199,7 @@ class LayoutEngineTest {
 
     private static DesignTemplate decorTemplate() {
         DesignTemplate plain = fixtureTemplate();
-        return new DesignTemplate(plain.name(), plain.theme(), new com.tcs.contentGenerator.agent.design.Decor(
+        return new DesignTemplate(plain.name(), plain.theme(), new com.tcs.contentGenerator.agent.design.Decor(null,
                 new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "wave"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", false),
                 null, null,
@@ -217,7 +217,7 @@ class LayoutEngineTest {
         Theme theme = new Theme(plain.theme().pageSize(),
                 new java.util.HashMap<>(plain.theme().colors()) {{ put("surface", "#eeeeee"); }},
                 styles, plain.theme().spacing());
-        return new DesignTemplate(plain.name(), theme, new com.tcs.contentGenerator.agent.design.Decor(
+        return new DesignTemplate(plain.name(), theme, new com.tcs.contentGenerator.agent.design.Decor(null,
                 new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "flat"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Hero("panel", "surface", "primary"),
@@ -312,7 +312,7 @@ class LayoutEngineTest {
         DesignTemplate photoLed = new DesignTemplate(base.name(),
                 new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
                         base.theme().textStyles(), base.theme().spacing()),
-                new com.tcs.contentGenerator.agent.design.Decor(decor.masthead(), decor.sectionHeader(),
+                new com.tcs.contentGenerator.agent.design.Decor(null, decor.masthead(), decor.sectionHeader(),
                         new com.tcs.contentGenerator.agent.design.Decor.Hero("photo-led", "surface", "primary"),
                         decor.sectionBand(), decor.photo(), decor.statCard(), decor.footer()));
         DesignDocument document = new LayoutEngine().layout(fixturePlan(), photoLed, "Test Issue", "job-1");
@@ -462,7 +462,7 @@ class LayoutEngineTest {
         DesignTemplate sideImages = new DesignTemplate(base.name(),
                 new Theme(new PageSize(PAGE_WIDTH, 1600), base.theme().colors(),
                         base.theme().textStyles(), base.theme().spacing()),
-                new com.tcs.contentGenerator.agent.design.Decor(d.masthead(), d.sectionHeader(), d.hero(),
+                new com.tcs.contentGenerator.agent.design.Decor(null, d.masthead(), d.sectionHeader(), d.hero(),
                         d.sectionBand(),
                         new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, "side"),
                         d.statCard(), d.footer()));
@@ -499,6 +499,53 @@ class LayoutEngineTest {
         }
         // no extra below-section slot for a side-image section
         assertTrue(slots.size() == 2, "no additional below-slot expected");
+    }
+
+    @Test
+    void coverDecorProducesADedicatedFirstPage() {
+        DesignTemplate base = editorialTemplate();
+        var d = base.decor();
+        java.util.Map<String, TextStyle> styles = new java.util.HashMap<>(base.theme().textStyles());
+        styles.put("CoverTitle", new TextStyle("SansSerif", 20, "normal", "background", 24, "right"));
+        styles.put("CoverTitleAccent", new TextStyle("SansSerif", 24, "bold", "primary", 28, "right"));
+        styles.put("CoverSubtitle", new TextStyle("SansSerif", 8, "normal", "background", 11, "right"));
+        DesignTemplate covered = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(), styles,
+                        base.theme().spacing()),
+                new com.tcs.contentGenerator.agent.design.Decor(
+                        new com.tcs.contentGenerator.agent.design.Decor.Cover("text", "primary"),
+                        d.masthead(), d.sectionHeader(), d.hero(), d.sectionBand(),
+                        d.photo(), d.statCard(), d.footer()));
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), covered,
+                "TD Monthly Newsletter — July 2026", "job-1");
+
+        List<Component> cover = document.pages().get(0).components();
+        // full-bleed background first, cover logo, empty photo slot, title split, wave band
+        assertTrue(cover.get(0) instanceof com.tcs.contentGenerator.design.ShapeBox shape
+                        && shape.role() == ComponentRole.DECORATION
+                        && Math.abs(shape.frame().h() - 800) < EPSILON,
+                "cover starts with a full-bleed background");
+        assertTrue(cover.stream().anyMatch(c -> c instanceof ImageBox box
+                        && LayoutEngine.COVER_LOGO_ASSET_ID.equals(box.assetId())),
+                "cover carries its own logo variant");
+        assertTrue(cover.stream().anyMatch(c -> c instanceof ImageBox box
+                        && box.assetId() == null && box.role() == ComponentRole.DECORATION),
+                "cover has an empty photo slot for the graphics agent");
+        List<String> titles = cover.stream()
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(b -> b.role() == ComponentRole.ISSUE_TITLE)
+                .map(TextBox::text).toList();
+        assertTrue(titles.contains("TD Monthly") && titles.contains("NEWSLETTER")
+                        && titles.contains("July 2026"),
+                "issue title splits into display lines, got " + titles);
+        assertTrue(cover.stream().anyMatch(c -> c instanceof ImageBox box
+                        && box.assetId() != null && box.assetId().startsWith("decor-coverwaves-")),
+                "cover ends with the wave band");
+        // masthead content starts on page 2
+        assertTrue(document.pages().size() >= 2);
+        assertTrue(document.pages().get(1).components().stream()
+                        .anyMatch(c -> c.role() == ComponentRole.LOGO),
+                "the regular masthead moved to page 2");
     }
 
     @Test

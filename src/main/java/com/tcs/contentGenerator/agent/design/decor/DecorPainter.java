@@ -71,6 +71,36 @@ public final class DecorPainter {
                         .formatted(fmt(w - glyphSize * 0.75), fmt(glyphSize * 0.85), fmt(glyphSize), accent));
     }
 
+    /**
+     * Decorative band of thin flowing wave lines (cover bottom): several
+     * horizontally-drifting cubic strokes alternating between the theme's
+     * primary/secondary colors at varying opacity — evokes the brand's wave
+     * motif without any raster asset.
+     */
+    public static String waveLines(Theme theme, double w, double h) {
+        String a = color(theme, "secondary");
+        String b = color(theme, "primary");
+        StringBuilder paths = new StringBuilder();
+        int lines = 7;
+        for (int i = 0; i < lines; i++) {
+            double base = h * (0.25 + 0.5 * i / (lines - 1.0));
+            double amp = h * 0.28 * (1 - 0.06 * i);
+            double drift = i * w * 0.03;
+            String stroke = i % 3 == 0 ? a : b;
+            double opacity = 0.25 + 0.08 * (i % 4);
+            paths.append(("<path d=\"M%s,%s C%s,%s %s,%s %s,%s S%s,%s %s,%s\" "
+                    + "fill=\"none\" stroke=\"%s\" stroke-width=\"1.2\" stroke-opacity=\"%s\"/>")
+                    .formatted(fmt(-drift), fmt(base),
+                            fmt(w * 0.2 - drift), fmt(base - amp),
+                            fmt(w * 0.35 - drift), fmt(base + amp),
+                            fmt(w * 0.55 - drift), fmt(base),
+                            fmt(w * 0.85 - drift), fmt(base - amp),
+                            fmt(w + drift), fmt(base + amp * 0.4),
+                            stroke, fmt(opacity)));
+        }
+        return svg(w, h, paths.toString());
+    }
+
     /** Thin gradient strip along the bottom page edge. */
     public static String footer(Decor.Footer spec, Theme theme, double w, double h) {
         return svg(w, h, gradientDef(color(theme, spec.from()), color(theme, spec.to()), 0)

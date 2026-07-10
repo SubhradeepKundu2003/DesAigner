@@ -142,8 +142,11 @@ final class ImagePlacer {
         boolean changed = false;
         List<Component> out = new ArrayList<>(components.size());
         for (Component c : components) {
-            if (!(c instanceof ImageBox slot) || slot.assetId() != null
-                    || slot.role() != ComponentRole.IMAGE_PLACEHOLDER || slot.source() == null) {
+            // DECORATION slots are the cover photo (allowed to bleed past the
+            // margins, hence the lint-exempt role) — filled the same way
+            if (!(c instanceof ImageBox slot) || slot.assetId() != null || slot.source() == null
+                    || (slot.role() != ComponentRole.IMAGE_PLACEHOLDER
+                            && slot.role() != ComponentRole.DECORATION)) {
                 out.add(c);
                 continue;
             }

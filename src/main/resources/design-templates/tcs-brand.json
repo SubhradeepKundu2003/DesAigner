@@ -21,6 +21,9 @@
       "Headline": { "fontFamily": "Houschka Rounded", "fontSizePt": 13, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 17 },
       "Body": { "fontFamily": "Houschka Rounded", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 },
       "BodyLead": { "fontFamily": "Houschka Rounded", "fontSizePt": 11.5, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 16 },
+      "CoverTitle": { "fontFamily": "Houschka Rounded", "fontSizePt": 34, "fontWeight": "normal", "colorRole": "background", "lineHeightPt": 40, "align": "right" },
+      "CoverTitleAccent": { "fontFamily": "Houschka Rounded", "fontSizePt": 40, "fontWeight": "bold", "colorRole": "secondary", "lineHeightPt": 46, "align": "right" },
+      "CoverSubtitle": { "fontFamily": "Houschka Rounded", "fontSizePt": 11, "fontWeight": "normal", "colorRole": "surface", "lineHeightPt": 15, "align": "right" },
       "SectionTitleKicker": { "fontFamily": "Houschka Rounded", "fontSizePt": 15, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 19 },
       "Stat": { "fontFamily": "Houschka Rounded", "fontSizePt": 32, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 36 },
       "StatLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
@@ -28,6 +31,7 @@
     }
   },
   "decor": {
+    "cover": { "fill": "text", "titleAccent": "secondary" },
     "masthead": { "style": "gradient-band", "from": "secondary", "to": "primary", "angle": 0, "heightPt": 130, "edge": "wave" },
     "sectionHeader": { "style": "chip", "colorRole": "primary", "kicker": true },
     "hero": { "style": "photo-led", "fill": "surface", "accent": "secondary" },
