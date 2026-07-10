@@ -131,6 +131,7 @@
       "shadow" : false,
       "placement" : "side"
     },
+    "cards" : { "fill" : "surface" },
     "statCard" : {
       "fill" : "surface",
       "accent" : "primary",

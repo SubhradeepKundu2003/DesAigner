@@ -256,6 +256,7 @@ public class StyleExtractionService {
                 new Decor.Hero("photo-led", "surface", "primary"),
                 new Decor.SectionBand("surface"),
                 new Decor.Photo(photoClip, 12, shadows, "side"),
+                new Decor.Cards("surface"),
                 new Decor.StatCard("surface", "primary", shadows),
                 new Decor.Footer("band", mastheadFromRole, mastheadToRole));
 

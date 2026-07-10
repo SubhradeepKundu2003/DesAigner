@@ -36,6 +36,15 @@ public final class DecorPainter {
                         .formatted(fmt(w), fmt(h), fmt(Math.min(w, h) * 0.3), color(theme, spec.colorRole())));
     }
 
+    /** Plain rounded, softly shadowed card (the card-grid cell surface). */
+    public static String card(Decor.Cards spec, Theme theme, double w, double h) {
+        double inset = 4;
+        return svg(w, h, SHADOW_FILTER
+                + "<rect x=\"%s\" y=\"%s\" width=\"%s\" height=\"%s\" rx=\"10\" fill=\"%s\" filter=\"url(#s)\"/>"
+                        .formatted(fmt(inset), fmt(inset), fmt(w - 2 * inset), fmt(h - 2 * inset),
+                                color(theme, spec.fill())));
+    }
+
     /** Rounded card with a left accent bar behind the stat value/label row. */
     public static String statCard(Decor.StatCard spec, Theme theme, double w, double h) {
         String fill = color(theme, spec.fill());

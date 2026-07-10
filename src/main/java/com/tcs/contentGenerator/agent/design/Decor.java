@@ -13,7 +13,17 @@ package com.tcs.contentGenerator.agent.design;
  * box-shadow/clip — the renderers stay unchanged.
  */
 public record Decor(Cover cover, Masthead masthead, SectionHeader sectionHeader, Hero hero,
-        SectionBand sectionBand, Photo photo, StatCard statCard, Footer footer) {
+        SectionBand sectionBand, Photo photo, Cards cards, StatCard statCard, Footer footer) {
+
+    /**
+     * Card grid: STANDARD sections with three or more articles lay out as a
+     * two-column grid of rounded, softly shadowed cards ({@code fill} names
+     * the card surface role). Cards replace side images and the below-slot
+     * for those sections; sections with fewer articles keep their configured
+     * photo treatment. Null = no card grid.
+     */
+    public record Cards(String fill) {
+    }
 
     /**
      * Dedicated magazine cover as page 1: full-bleed {@code fill} background,

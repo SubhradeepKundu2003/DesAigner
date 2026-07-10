@@ -211,6 +211,8 @@ public class DesignCompositionAgent implements Agent {
                             box.frame().w(), box.frame().h());
                     case "coverwaves" -> DecorPainter.waveLines(template.theme(),
                             box.frame().w(), box.frame().h());
+                    case "card" -> DecorPainter.card(decor.cards(), template.theme(),
+                            box.frame().w(), box.frame().h());
                     default -> null;
                 };
                 if (svg == null) {

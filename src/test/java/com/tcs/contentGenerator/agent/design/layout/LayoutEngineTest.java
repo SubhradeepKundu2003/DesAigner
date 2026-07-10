@@ -203,7 +203,7 @@ class LayoutEngineTest {
                 new com.tcs.contentGenerator.agent.design.Decor.Masthead("gradient-band", "primary", "secondary", 0, 60, "wave"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", false),
                 null, null,
-                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, null),
+                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, null), null,
                 new com.tcs.contentGenerator.agent.design.Decor.StatCard("background", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Footer("band", "primary", "secondary")));
     }
@@ -222,7 +222,7 @@ class LayoutEngineTest {
                 new com.tcs.contentGenerator.agent.design.Decor.SectionHeader("chip", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Hero("panel", "surface", "primary"),
                 new com.tcs.contentGenerator.agent.design.Decor.SectionBand("surface"),
-                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, null),
+                new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, null), null,
                 new com.tcs.contentGenerator.agent.design.Decor.StatCard("surface", "primary", true),
                 new com.tcs.contentGenerator.agent.design.Decor.Footer("band", "primary", "secondary")));
     }
@@ -314,7 +314,7 @@ class LayoutEngineTest {
                         base.theme().textStyles(), base.theme().spacing()),
                 new com.tcs.contentGenerator.agent.design.Decor(null, decor.masthead(), decor.sectionHeader(),
                         new com.tcs.contentGenerator.agent.design.Decor.Hero("photo-led", "surface", "primary"),
-                        decor.sectionBand(), decor.photo(), decor.statCard(), decor.footer()));
+                        decor.sectionBand(), decor.photo(), decor.cards(), decor.statCard(), decor.footer()));
         DesignDocument document = new LayoutEngine().layout(fixturePlan(), photoLed, "Test Issue", "job-1");
         List<Component> firstPage = document.pages().get(0).components();
 
@@ -464,7 +464,7 @@ class LayoutEngineTest {
                         base.theme().textStyles(), base.theme().spacing()),
                 new com.tcs.contentGenerator.agent.design.Decor(null, d.masthead(), d.sectionHeader(), d.hero(),
                         d.sectionBand(),
-                        new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, "side"),
+                        new com.tcs.contentGenerator.agent.design.Decor.Photo("rounded", 12, true, "side"), null,
                         d.statCard(), d.footer()));
         GeneratedArticle first = new GeneratedArticle("First side article",
                 "A body long enough to sit beside its image comfortably.", null);
@@ -515,7 +515,7 @@ class LayoutEngineTest {
                 new com.tcs.contentGenerator.agent.design.Decor(
                         new com.tcs.contentGenerator.agent.design.Decor.Cover("text", "primary"),
                         d.masthead(), d.sectionHeader(), d.hero(), d.sectionBand(),
-                        d.photo(), d.statCard(), d.footer()));
+                        d.photo(), d.cards(), d.statCard(), d.footer()));
         DesignDocument document = new LayoutEngine().layout(fixturePlan(), covered,
                 "TD Monthly Newsletter — July 2026", "job-1");
 
@@ -546,6 +546,54 @@ class LayoutEngineTest {
         assertTrue(document.pages().get(1).components().stream()
                         .anyMatch(c -> c.role() == ComponentRole.LOGO),
                 "the regular masthead moved to page 2");
+    }
+
+    @Test
+    void threePlusArticlesLayOutAsACardGrid() {
+        DesignTemplate base = editorialTemplate();
+        var d = base.decor();
+        DesignTemplate carded = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 1600), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                new com.tcs.contentGenerator.agent.design.Decor(null, d.masthead(), d.sectionHeader(),
+                        d.hero(), d.sectionBand(), d.photo(),
+                        new com.tcs.contentGenerator.agent.design.Decor.Cards("surface"),
+                        d.statCard(), d.footer()));
+        List<GeneratedArticle> articles = List.of(
+                new GeneratedArticle("Card one", "First card body.", null),
+                new GeneratedArticle("Card two", "Second card body with a little more text.", null),
+                new GeneratedArticle("Card three", "Third card body.", null));
+        SectionComposition section = new SectionComposition(NewsletterSection.PROJECT_UPDATES,
+                SectionPattern.STANDARD, articles, "primary", null, null, null);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), carded, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> cardBoxes = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-card-"))
+                .toList();
+        assertTrue(cardBoxes.size() == 3, "one card per article, got " + cardBoxes.size());
+        // first two cards share a row at half width; the odd third is full width
+        assertTrue(Math.abs(cardBoxes.get(0).frame().y() - cardBoxes.get(1).frame().y()) < EPSILON,
+                "first two cards share a row");
+        assertTrue(Math.abs(cardBoxes.get(0).frame().h() - cardBoxes.get(1).frame().h()) < EPSILON,
+                "paired cards have equal heights");
+        assertTrue(cardBoxes.get(2).frame().w() > cardBoxes.get(0).frame().w() * 1.5,
+                "odd trailing card is full width");
+        // headlines sit inside their cards
+        for (ImageBox card : cardBoxes) {
+            assertTrue(all.stream().anyMatch(c -> c instanceof TextBox t
+                            && t.role() == ComponentRole.ARTICLE_HEADLINE
+                            && t.frame().x() >= card.frame().x()
+                            && t.frame().y() >= card.frame().y()
+                            && t.frame().x() + t.frame().w() <= card.frame().x() + card.frame().w() + EPSILON),
+                    "expected a headline inside card " + card.id());
+        }
+        // card sections get no side-image slots and no below-slot
+        assertTrue(all.stream().noneMatch(c -> c instanceof ImageBox b
+                        && b.assetId() == null && b.role() == ComponentRole.IMAGE_PLACEHOLDER),
+                "card sections must not also get photo slots");
     }
 
     @Test

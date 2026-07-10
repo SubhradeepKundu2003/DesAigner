@@ -216,23 +216,89 @@ public class LayoutEngine {
             java.util.concurrent.atomic.AtomicInteger sideImageCounter) {
         boolean sideImages = decor != null && decor.photo() != null
                 && "side".equals(decor.photo().placement());
+        boolean cards = decor != null && decor.cards() != null
+                && section.pattern() == SectionPattern.STANDARD && section.articles().size() >= 3;
         switch (section.pattern()) {
             case HERO -> layoutHero(p, section, theme, decor);
             case STAT_CALLOUT -> layoutStatCallout(p, section, theme, decor);
             case EVENT_LIST -> layoutEventList(p, section, theme);
             case TWO_COLUMN -> layoutTwoColumn(p, section, theme);
             case STANDARD -> {
-                if (sideImages) {
+                if (cards) {
+                    layoutStandardAsCards(p, section, theme, decor.cards());
+                } else if (sideImages) {
                     layoutStandardWithSideImages(p, section, theme, sideImageCounter);
                 } else {
                     layoutStandard(p, section, theme);
                 }
             }
         }
-        // side-image sections are already illustrated per article
-        if (!(sideImages && section.pattern() == SectionPattern.STANDARD)) {
+        // side-image and card sections are already visually treated per article
+        if (!((sideImages || cards) && section.pattern() == SectionPattern.STANDARD)) {
             reservePhotoSlot(p, section, decor);
         }
+    }
+
+    /**
+     * Card grid for dense sections (3+ articles): two rounded shadowed cards
+     * per row (equal height — the taller cell wins), an odd trailing article
+     * gets a full-width card. Cards carry headline + body only; they replace
+     * the section's photo treatment, keeping dense sections compact.
+     */
+    private void layoutStandardAsCards(Paginator p, SectionComposition section, Theme theme,
+            Decor.Cards cards) {
+        TextStyle headStyle = styleOf(theme, "Headline");
+        TextStyle bodyStyle = styleOf(theme, "Body");
+        List<GeneratedArticle> articles = section.articles();
+        double gutter = theme.spacing().gutterPt();
+        for (int i = 0; i < articles.size(); i += 2) {
+            boolean pair = i + 1 < articles.size();
+            double cardWidth = pair ? (p.contentWidth() - gutter) / 2 : p.contentWidth();
+            double innerWidth = cardWidth - 2 * CARD_PADDING;
+
+            GeneratedArticle left = articles.get(i);
+            double leftHeight = cardContentHeight(left, headStyle, bodyStyle, innerWidth);
+            double rowContentHeight = leftHeight;
+            if (pair) {
+                rowContentHeight = Math.max(rowContentHeight,
+                        cardContentHeight(articles.get(i + 1), headStyle, bodyStyle, innerWidth));
+            }
+            double cardHeight = p.reserve(rowContentHeight + 2 * CARD_PADDING,
+                    "card-row:" + section.section().title());
+            double y = p.y();
+            placeCard(p, left, section, theme, headStyle, bodyStyle, p.x(), y, cardWidth, cardHeight, cards);
+            if (pair) {
+                placeCard(p, articles.get(i + 1), section, theme, headStyle, bodyStyle,
+                        p.x() + cardWidth + gutter, y, cardWidth, cardHeight, cards);
+            }
+            p.advance(cardHeight);
+            if (i + 2 < articles.size()) {
+                p.advance(ITEM_GAP);
+            }
+        }
+    }
+
+    private double cardContentHeight(GeneratedArticle article, TextStyle headStyle, TextStyle bodyStyle,
+            double innerWidth) {
+        return measurer.heightOf(article.headline(), headStyle, innerWidth) + PARAGRAPH_GAP
+                + measurer.heightOf(article.body(), bodyStyle, innerWidth);
+    }
+
+    private void placeCard(Paginator p, GeneratedArticle article, SectionComposition section, Theme theme,
+            TextStyle headStyle, TextStyle bodyStyle, double x, double y, double width, double height,
+            Decor.Cards cards) {
+        SourceLink link = new SourceLink(section.section().title(), article.headline());
+        String id = p.nextId();
+        p.add(new ImageBox(id, ComponentRole.DECORATION, new Frame(x, y, width, height),
+                0, true, null, DECOR_ASSET_PREFIX + "card-" + id, "card"));
+        double innerWidth = width - 2 * CARD_PADDING;
+        double headHeight = measurer.heightOf(article.headline(), headStyle, innerWidth);
+        addTextAt(p, x + CARD_PADDING, y + CARD_PADDING, innerWidth, headHeight,
+                ComponentRole.ARTICLE_HEADLINE, "Headline", article.headline(), link);
+        double bodyHeight = measurer.heightOf(article.body(), bodyStyle, innerWidth);
+        addTextAt(p, x + CARD_PADDING, y + CARD_PADDING + headHeight + PARAGRAPH_GAP, innerWidth,
+                Math.min(bodyHeight, height - 2 * CARD_PADDING - headHeight - PARAGRAPH_GAP),
+                ComponentRole.ARTICLE_BODY, "Body", article.body(), link);
     }
 
     /**
