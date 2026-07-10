@@ -111,6 +111,11 @@ final class ImagePlacer {
             if (sectionsWithImage.contains(link.sectionTitle())) {
                 continue;
             }
+            if (insideCard(body, components)) {
+                // card-grid cells are a deliberate compact treatment — never
+                // squeeze a scavenged image into a shorter card's leftover space
+                continue;
+            }
             ArticleMatch match = matchArticle(link);
             ImageCandidate candidate = resolveCandidate(match);
             if (candidate == null) {
@@ -248,6 +253,14 @@ final class ImagePlacer {
     }
 
     private record StoredImage(String storedRef, Integer width, Integer height) {
+    }
+
+    private static boolean insideCard(TextBox body, List<Component> components) {
+        Frame f = body.frame();
+        return components.stream().anyMatch(c -> c instanceof ImageBox box
+                && box.assetId() != null && box.assetId().startsWith("decor-card-")
+                && f.x() < box.frame().x() + box.frame().w() && f.x() + f.w() > box.frame().x()
+                && f.y() < box.frame().y() + box.frame().h() && f.y() + f.h() > box.frame().y());
     }
 
     private int[] readDimensions(String storedRef) {

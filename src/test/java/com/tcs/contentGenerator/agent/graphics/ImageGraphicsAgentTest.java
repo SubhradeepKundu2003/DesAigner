@@ -205,6 +205,29 @@ class ImageGraphicsAgentTest {
         assertEquals(0, context.getGraphicsReport().imagesPlaced());
     }
 
+    @Test
+    void neverScavengesAnImageIntoACardCell() throws IOException {
+        TextBox body = bodyBox(100, 40, LINK);
+        // the card decoration encloses the body — leftover space inside the
+        // card must not attract a gap-scavenged image
+        ImageBox card = new ImageBox("card-1", ComponentRole.DECORATION,
+                new Frame(15, 90, 270, 250), 0, true, null, "decor-card-cmp-9", "card");
+        Page page = new Page("page-1", List.of(card, body));
+        DesignDocument document = documentOf(page);
+
+        ContentItem item = contentItem(new SourceRef("other.docx", "Body", 2));
+        PipelineContext context = contextWith(document, newsletterWith(item), List.of());
+        byte[] png = tinyPng(2, 2);
+        StorageService storage = new FakeStorageService(
+                Map.of("assets/DELIVERY_HIGHLIGHTS/default-photo.png", png),
+                Map.of("assets/DELIVERY_HIGHLIGHTS", List.of("assets/DELIVERY_HIGHLIGHTS/default-photo.png")));
+
+        new ImageGraphicsAgent(storage, new AssetLibrary(storage, "assets"), PLAIN_TEMPLATES).execute(context);
+
+        assertEquals(0, context.getGraphicsReport().imagesPlaced(),
+                "no image may be squeezed into a card cell");
+    }
+
     private static TextBox bodyBox(double y, double h, SourceLink link) {
         return new TextBox("cmp-1", ComponentRole.ARTICLE_BODY, new Frame(20, y, 260, h), 0, false,
                 link, "Body", "NPS reached 72 this quarter across 120 accounts.");

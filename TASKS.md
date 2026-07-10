@@ -1205,11 +1205,25 @@ contrast, subtitle muted only if legible). Suite **111/111**; live e2e:
 page 1 visually matches the user's mock (black page, white logo, rounded
 photo, white/gold right-aligned display title, wave band).
 
+**Card grid DONE (2026-07-10, third layout pattern, user-approved):**
+`Decor.Cards(fill)` — STANDARD sections with **3+ articles** lay out as a
+two-column grid of rounded shadowed cards (`DecorPainter.card` DECORATION
+ImageBox per cell under `decor-card-<id>`, headline + body inset by
+CARD_PADDING, paired cards share a reserved row at equal height, an odd
+trailing article gets a full-width card). Card sections suppress both
+side-image slots and the below-slot. Guard added after the first live
+run: **the gap-scavenger must never squeeze an image into a card cell**
+(`ImagePlacer.insideCard` — a body overlapped by a `decor-card-*` box is
+skipped; found live as a stray thumbnail inside the shorter card of a
+pair). tcs-brand + nocturnal enable cards, noir-luxe not, extraction
+emits `Cards("surface")`. Suite **113/113**; live e2e: a 4-article
+Delivery Highlights rendered as a clean 2×2 card grid (content-dependent
+— planning must yield a 3+-article section; took two runs to trigger).
+
 **Current next-step queue:** (1) replace the abstract default photos with
-real photography (drop-in, zero code); (2) remaining layout patterns (card
-grid, LLM-chosen pull quotes, KPI tiles) + keep-with-next pagination for
-section headers + avoid near-empty trailing pages (last events bullet
-spilled to page 5 in the cover run);
+real photography (drop-in, zero code); (2) remaining layout patterns
+(LLM-chosen pull quotes, KPI tiles) + keep-with-next pagination for
+section headers + avoid near-empty trailing pages;
 (3) template-selection UX (per-run choice via API/UI — today the default
 is a config flip; also consider white section-icon variants so dark
 templates get real icons); (4) deeper reference learning (layout/component
