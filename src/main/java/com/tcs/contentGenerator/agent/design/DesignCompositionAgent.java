@@ -15,6 +15,10 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import com.tcs.contentGenerator.agent.design.decor.DecorPainter;
+import com.tcs.contentGenerator.agent.design.infographic.InfographicCatalog;
+import com.tcs.contentGenerator.agent.design.infographic.InfographicPainter;
+import com.tcs.contentGenerator.agent.design.infographic.InfographicSelector;
+import com.tcs.contentGenerator.agent.design.infographic.InfographicSpec;
 import com.tcs.contentGenerator.agent.design.layout.LayoutEngine;
 import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
@@ -68,13 +72,16 @@ public class DesignCompositionAgent implements Agent {
     private final TemplateCatalog templates;
     private final LayoutEngine layoutEngine;
     private final StorageService storage;
+    private final InfographicCatalog infographics;
     private final String brandAssetsRoot;
 
     public DesignCompositionAgent(TemplateCatalog templates, LayoutEngine layoutEngine, StorageService storage,
+            InfographicCatalog infographics,
             @Value("${app.graphics.brand-assets-root:assets}") String brandAssetsRoot) {
         this.templates = templates;
         this.layoutEngine = layoutEngine;
         this.storage = storage;
+        this.infographics = infographics;
         this.brandAssetsRoot = brandAssetsRoot;
     }
 
@@ -99,9 +106,13 @@ public class DesignCompositionAgent implements Agent {
         if (darkBackground) {
             log.info("Dark page background — using dot section icons");
         }
+        // one selector per run: seeded by the job for reproducible picks, and
+        // it tracks which designs this issue already used (variety constraint)
+        InfographicSelector selector = new InfographicSelector(infographics.all(),
+                context.getJobId(), darkBackground);
         List<SectionComposition> sections = newsletter.sections().stream()
                 .filter(section -> !section.articles().isEmpty())
-                .map(section -> compose(section, iconRefs))
+                .map(section -> compose(section, iconRefs, selector))
                 .toList();
         CompositionPlan plan = new CompositionPlan(template.name(), sections);
         DesignDocument document = layoutEngine.layout(plan, template, newsletter.issueTitle(), context.getJobId());
@@ -134,7 +145,8 @@ public class DesignCompositionAgent implements Agent {
                 document.pages().size(), sections.size(), template.name());
     }
 
-    private SectionComposition compose(GeneratedSection section, Map<NewsletterSection, String> iconRefs) {
+    private SectionComposition compose(GeneratedSection section, Map<NewsletterSection, String> iconRefs,
+            InfographicSelector selector) {
         NewsletterSection newsletterSection = section.section();
         List<GeneratedArticle> articles = section.articles();
         String iconColorRole = IconMatcher.colorRoleFor(newsletterSection);
@@ -150,6 +162,22 @@ public class DesignCompositionAgent implements Agent {
                     iconAssetId, null, null);
         }
         if (articles.size() == 1) {
+            // explicit points from the generation agent's POINT: protocol win
+            // over metric-derived patterns — they are the article's declared
+            // structure. Purely numeric content without points stays on the
+            // KPI_TILES/STAT_CALLOUT path below, which IS the KPI archetype.
+            GeneratedArticle article = articles.get(0);
+            if (!article.points().isEmpty()) {
+                java.util.Optional<InfographicSpec> spec =
+                        selector.select(newsletterSection, article.points());
+                if (spec.isPresent()) {
+                    log.info("[{}] infographic '{}' chosen for {} point(s)",
+                            newsletterSection.title(), spec.get().name(), article.points().size());
+                    return new SectionComposition(newsletterSection, SectionPattern.INFOGRAPHIC,
+                            articles, iconColorRole, iconAssetId, null, null, List.of(),
+                            spec.get(), article.points());
+                }
+            }
             List<SectionComposition.Stat> stats = extractStats(articles.get(0));
             if (stats.size() >= 2) {
                 return new SectionComposition(newsletterSection, SectionPattern.KPI_TILES, articles,
@@ -199,10 +227,11 @@ public class DesignCompositionAgent implements Agent {
      * (asset simply not attached) rather than failing the run.
      */
     private List<Asset> decorAssets(DesignDocument document, DesignTemplate template, String jobId) {
+        // decor may be null (td-classic): infographic boxes are still generated —
+        // they are chosen content structure, not template flair. The other kinds
+        // only exist when the template's decor placed them, so the null never
+        // reaches their branches.
         Decor decor = template.decor();
-        if (decor == null) {
-            return List.of();
-        }
         List<Asset> assets = new ArrayList<>();
         for (Page page : document.pages()) {
             for (var component : page.components()) {
@@ -233,6 +262,15 @@ public class DesignCompositionAgent implements Agent {
                         String role = box.assetId().substring(LayoutEngine.DECOR_ASSET_PREFIX.length())
                                 .split("-")[1];
                         yield DecorPainter.sectionTint(role, template.theme(),
+                                box.frame().w(), box.frame().h());
+                    }
+                    case "infographic" -> {
+                        // decor-infographic-<kind.role.role.number>-<cmpId>: all drawing
+                        // params ride in the id (InfographicPainter.encode) — this
+                        // regeneration path has nothing else to go on
+                        String params = box.assetId().substring(LayoutEngine.DECOR_ASSET_PREFIX.length())
+                                .split("-")[1];
+                        yield InfographicPainter.paint(params, template.theme(),
                                 box.frame().w(), box.frame().h());
                     }
                     default -> null;

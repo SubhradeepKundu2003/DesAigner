@@ -25,6 +25,8 @@
       "Stat": { "fontFamily": "Inter", "fontSizePt": 32, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 36 },
       "StatLabel": { "fontFamily": "Inter", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
       "Kpi": { "fontFamily": "Inter", "fontSizePt": 24, "fontWeight": "bold", "colorRole": "primary", "lineHeightPt": 28, "align": "center" },
+      "InfographicLabel": { "fontFamily": "Inter", "fontSizePt": 11, "fontWeight": "bold", "colorRole": "background", "lineHeightPt": 14 },
+      "InfographicBody": { "fontFamily": "Inter", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "background", "lineHeightPt": 12 },
       "KpiLabel": { "fontFamily": "Inter", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12, "align": "center" },
       "EventItem": { "fontFamily": "Inter", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
     }

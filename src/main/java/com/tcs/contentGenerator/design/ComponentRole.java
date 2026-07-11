@@ -16,6 +16,14 @@ public enum ComponentRole {
     ARTICLE_BODY,
     STAT_VALUE,
     STAT_LABEL,
+    /** Short label of one infographic point (numbered bar, card, timeline node, ...). */
+    INFOGRAPHIC_LABEL,
+    /**
+     * One-line description of one infographic point. Deliberately not
+     * {@link #ARTICLE_BODY}: that role triggers a per-box editorial LLM check
+     * and anchors image gap-scavenging — wrong for short point captions.
+     */
+    INFOGRAPHIC_TEXT,
     IMAGE_PLACEHOLDER,
     LOGO,
     /**

@@ -138,6 +138,14 @@ public class BrandComplianceAgent implements Agent {
         List<Finding> findings = new ArrayList<>();
         String headline = applyTermRules(applyNameRules(article.headline(), findings), findings);
         String body = applyTermRules(applyNameRules(article.body(), findings), findings);
+        // infographic points get the same deterministic fixes (terminology,
+        // casing); the banned-phrase LLM rewrite stays headline+body-only —
+        // points are short labels, a rewrite there risks more than it fixes
+        List<GeneratedArticle.Point> points = article.points().stream()
+                .map(point -> new GeneratedArticle.Point(
+                        applyTermRules(applyNameRules(point.label(), findings), findings),
+                        applyTermRules(applyNameRules(point.text(), findings), findings)))
+                .toList();
 
         List<String> banned = bannedIn(headline + "\n" + body);
         if (!banned.isEmpty()) {
@@ -152,9 +160,10 @@ public class BrandComplianceAgent implements Agent {
             }
         }
 
-        boolean changed = !headline.equals(article.headline()) || !body.equals(article.body());
+        boolean changed = !headline.equals(article.headline()) || !body.equals(article.body())
+                || !points.equals(article.points());
         GeneratedArticle result = changed
-                ? new GeneratedArticle(headline, body, article.source())
+                ? new GeneratedArticle(headline, body, article.source(), points)
                 : article;
         // The same term can occur in both headline and body — report it once.
         List<ComplianceViolation> violations = findings.stream()

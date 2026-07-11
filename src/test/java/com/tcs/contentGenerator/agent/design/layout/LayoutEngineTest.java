@@ -693,4 +693,65 @@ class LayoutEngineTest {
                 || b.y() + b.h() <= a.y() + EPSILON;
         return !separated;
     }
+
+    @Test
+    void infographicLaysOutNumberedRowsWithTextInsideAndBodyBelow() {
+        DesignTemplate base = fixtureTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        com.tcs.contentGenerator.agent.design.infographic.InfographicSpec spec =
+                new com.tcs.contentGenerator.agent.design.infographic.InfographicSpec(
+                        "numbered-bars",
+                        com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.NUMBERED_LIST,
+                        3, 5, 60, 220, false,
+                        com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Background.ANY,
+                        new com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Shape(
+                                "numberedBars", "primary", "text"));
+        List<GeneratedArticle.Point> points = List.of(
+                new GeneratedArticle.Point("Discovery", "Requirements signed off."),
+                new GeneratedArticle.Point("Build", "Development finished early."),
+                new GeneratedArticle.Point("Go-live", "Rollout reached every region."));
+        GeneratedArticle article = new GeneratedArticle("Project headline",
+                "A short project body with a couple of sentences.", null, points);
+        SectionComposition section = new SectionComposition(NewsletterSection.PROJECT_UPDATES,
+                SectionPattern.INFOGRAPHIC, List.of(article), "primary", null, null, null,
+                List.of(), spec, points);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> rows = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        assertTrue(rows.size() == 3, "one painted row per point, got " + rows.size());
+        // the drawing params ride in the asset id: kind.barRole.discRole.number
+        for (int i = 0; i < rows.size(); i++) {
+            assertTrue(rows.get(i).assetId().contains("numberedBars.primary.text." + (i + 1)),
+                    "row " + i + " id must encode its painter params: " + rows.get(i).assetId());
+            if (i > 0) {
+                assertTrue(rows.get(i).frame().y() > rows.get(i - 1).frame().y() + EPSILON,
+                        "rows stack downward");
+            }
+        }
+        List<Component> labels = all.stream()
+                .filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).toList();
+        List<Component> texts = all.stream()
+                .filter(c -> c.role() == ComponentRole.INFOGRAPHIC_TEXT).toList();
+        assertTrue(labels.size() == 3 && texts.size() == 3, "label + one-liner per point");
+        for (int i = 0; i < 3; i++) {
+            Frame row = rows.get(i).frame();
+            Frame label = labels.get(i).frame();
+            assertTrue(label.y() >= row.y() - EPSILON
+                            && label.y() + label.h() <= row.y() + row.h() + EPSILON,
+                    "each label sits inside its row bar");
+        }
+        Component body = all.stream().filter(c -> c.role() == ComponentRole.ARTICLE_BODY)
+                .findFirst().orElseThrow();
+        Frame lastRow = rows.get(2).frame();
+        assertTrue(body.frame().y() >= lastRow.y() + lastRow.h() - EPSILON,
+                "the article body renders below the infographic");
+    }
 }

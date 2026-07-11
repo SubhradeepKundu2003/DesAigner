@@ -1,0 +1,15 @@
+{
+  "name": "numbered-bars",
+  "archetype": "NUMBERED_LIST",
+  "minItems": 3,
+  "maxItems": 5,
+  "titleCapacity": 60,
+  "bodyCapacity": 220,
+  "wantsNumbers": false,
+  "background": "ANY",
+  "shape": {
+    "kind": "numberedBars",
+    "barFill": "primary",
+    "leadFill": "text"
+  }
+}

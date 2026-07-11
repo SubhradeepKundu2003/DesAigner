@@ -31,6 +31,11 @@ final class GenerationPrompts {
                 no "Headline:" prefix).
               - Then a blank line, then the article body as 1-3 short plain-text
                 paragraphs separated by blank lines.
+              - ONLY IF the source facts naturally form 3 to 6 distinct steps,
+                phases, pillars, or categories: after the body, add one line per
+                point, each formatted exactly as
+                POINT: short label of 2-5 words | one short sentence about it
+                Most articles have no such structure - then add no POINT lines.
               - No markdown syntax, no bullet lists, no sign-off, nothing else.
             """;
 

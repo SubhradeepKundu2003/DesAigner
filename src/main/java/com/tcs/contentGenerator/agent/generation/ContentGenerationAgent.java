@@ -37,6 +37,17 @@ public class ContentGenerationAgent implements Agent {
     private static final String LEADERSHIP_FALLBACK_HEADLINE = "A Message from Leadership";
     /** Anything longer than this is body prose, not a headline. */
     private static final int MAX_HEADLINE_CHARS = 120;
+    /**
+     * One {@code POINT: label | text} protocol line, wherever it appears (the
+     * model is asked to put them after the body but is not trusted to).
+     * Tolerates bullet/markdown prefixes the small model sometimes adds.
+     */
+    private static final java.util.regex.Pattern POINT_LINE = java.util.regex.Pattern.compile(
+            "(?im)^\\s*[-*>\\d.\\s]*point\\s*:\\s*(.+?)\\s*$");
+    /** More points than any infographic can hold is the model rambling — keep the first few. */
+    private static final int MAX_POINTS = 6;
+    /** A "label" this long is a sentence the model failed to split — not a point. */
+    private static final int MAX_POINT_LABEL_CHARS = 80;
 
     private final LlmClient llm;
 
@@ -139,14 +150,18 @@ public class ContentGenerationAgent implements Agent {
 
     /**
      * Parses the plain-text protocol: first non-blank line = headline, the rest =
-     * body. Tolerates the model's habits (markdown fences, "Headline:" prefixes,
-     * decoration) and falls back to the extracted title/summary when a part is
-     * missing, so this never throws.
+     * body, with optional {@code POINT: label | text} lines pulled out first
+     * (wherever they sit) into {@link GeneratedArticle#points()}. Tolerates the
+     * model's habits (markdown fences, "Headline:" prefixes, decoration) and
+     * falls back to the extracted title/summary when a part is missing, so this
+     * never throws.
      */
     private GeneratedArticle parse(String raw, String fallbackHeadline, String fallbackBody,
             PlannedItem source) {
         String text = raw == null ? "" : raw.strip();
         text = text.replaceAll("(?m)^```[a-zA-Z]*\\s*$", "").strip();
+        List<GeneratedArticle.Point> points = extractPoints(text);
+        text = POINT_LINE.matcher(text).replaceAll("").strip();
 
         String headline = "";
         String body = "";
@@ -175,7 +190,36 @@ public class ContentGenerationAgent implements Agent {
         if (body.isBlank()) {
             body = fallbackBody;
         }
-        return new GeneratedArticle(headline, body, source);
+        return new GeneratedArticle(headline, body, source, points);
+    }
+
+    /**
+     * Every well-formed {@code POINT: label | text} line, capped at
+     * {@link #MAX_POINTS}. Malformed lines (no pipe and too long to be a bare
+     * label, or an empty label) are dropped rather than guessed at — a missing
+     * point only costs an infographic candidate, never content: the body prose
+     * still carries the facts.
+     */
+    private static List<GeneratedArticle.Point> extractPoints(String text) {
+        List<GeneratedArticle.Point> points = new ArrayList<>();
+        java.util.regex.Matcher matcher = POINT_LINE.matcher(text);
+        while (matcher.find() && points.size() < MAX_POINTS) {
+            String line = matcher.group(1).strip();
+            String label;
+            String pointText;
+            int pipe = line.indexOf('|');
+            if (pipe >= 0) {
+                label = line.substring(0, pipe).strip();
+                pointText = line.substring(pipe + 1).strip();
+            } else {
+                label = line;
+                pointText = "";
+            }
+            if (!label.isBlank() && label.length() <= MAX_POINT_LABEL_CHARS) {
+                points.add(new GeneratedArticle.Point(label, pointText));
+            }
+        }
+        return points;
     }
 
     private static String cleanHeadline(String headline) {

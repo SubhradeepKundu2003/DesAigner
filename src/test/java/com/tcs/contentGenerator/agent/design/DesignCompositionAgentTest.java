@@ -45,6 +45,8 @@ class DesignCompositionAgentTest {
     /** td-classic has no decor — the pre-decor plain baseline. */
     private static final TemplateCatalog PLAIN_TEMPLATES =
             new TemplateCatalog(JsonMapper.builder().build(), "td-classic");
+    private static final com.tcs.contentGenerator.agent.design.infographic.InfographicCatalog INFOGRAPHICS =
+            new com.tcs.contentGenerator.agent.design.infographic.InfographicCatalog(JsonMapper.builder().build());
 
     private static PipelineContext contextWithNewsletter() {
         GeneratedArticle article = new GeneratedArticle("Delivery headline",
@@ -66,7 +68,7 @@ class DesignCompositionAgentTest {
     @Test
     void attachesUnconditionalBrandLogoAsset() {
         DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of()), "assets");
+                new ListingStorage(List.of()), INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -79,7 +81,7 @@ class DesignCompositionAgentTest {
     @Test
     void logoStoredRefRespectsBrandAssetsRootProperty() {
         DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of()), "custom-root");
+                new ListingStorage(List.of()), INFOGRAPHICS, "custom-root");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -91,7 +93,7 @@ class DesignCompositionAgentTest {
     @Test
     void usesCatalogDefaultTemplate() {
         DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of()), "assets");
+                new ListingStorage(List.of()), INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -107,7 +109,7 @@ class DesignCompositionAgentTest {
                 new ListingStorage(List.of(
                         "assets/ICONS/DELIVERY_HIGHLIGHTS.svg",
                         "assets/ICONS/readme.txt")),
-                "assets");
+                INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -119,7 +121,7 @@ class DesignCompositionAgentTest {
     @Test
     void sectionWithoutIconFileKeepsNoIconAsset() {
         DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of("assets/ICONS/UPCOMING_EVENTS.svg")), "assets");
+                new ListingStorage(List.of("assets/ICONS/UPCOMING_EVENTS.svg")), INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -132,7 +134,7 @@ class DesignCompositionAgentTest {
     @Test
     void darkTemplateGetsTheWhiteLogoVariant() {
         DesignCompositionAgent agent = new DesignCompositionAgent(DARK_TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of()), "assets");
+                new ListingStorage(List.of()), INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -145,7 +147,7 @@ class DesignCompositionAgentTest {
     @Test
     void darkTemplateSkipsBlackIconFilesAndKeepsDotFallback() {
         DesignCompositionAgent agent = new DesignCompositionAgent(DARK_TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of("assets/ICONS/DELIVERY_HIGHLIGHTS.svg")), "assets");
+                new ListingStorage(List.of("assets/ICONS/DELIVERY_HIGHLIGHTS.svg")), INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -159,7 +161,7 @@ class DesignCompositionAgentTest {
     void everyDecorationBoxGetsAStoredSvgAsset() {
         ListingStorage storage = new ListingStorage(List.of());
         DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
-                storage, "assets");
+                storage, INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);
@@ -196,7 +198,7 @@ class DesignCompositionAgentTest {
         context.setGeneratedNewsletter(new GeneratedNewsletter("Test Issue", List.of(section)));
 
         DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of()), "assets");
+                new ListingStorage(List.of()), INFOGRAPHICS, "assets");
         agent.execute(context);
 
         // three numeric metrics → three KPI tiles, each a STAT_VALUE box; the
@@ -218,9 +220,69 @@ class DesignCompositionAgentTest {
     }
 
     @Test
+    void articleWithPointsBecomesAnInfographicWithStoredRowAssets() {
+        ContentItem item = new ContentItem("Apollo", "summary", BusinessCategory.PROJECT_UPDATES,
+                ItemType.PROJECT, List.of(), List.of());
+        GeneratedArticle article = new GeneratedArticle("Apollo lands on time",
+                "A short project body.", new PlannedItem(item, 9, "notable"),
+                List.of(new GeneratedArticle.Point("Discovery", "Requirements signed off."),
+                        new GeneratedArticle.Point("Build", "Development finished early."),
+                        new GeneratedArticle.Point("Go-live", "Rollout reached every region.")));
+        GeneratedSection section = new GeneratedSection(NewsletterSection.PROJECT_UPDATES, List.of(article));
+        PipelineContext context = new PipelineContext("job-1", List.of());
+        context.setGeneratedNewsletter(new GeneratedNewsletter("Test Issue", List.of(section)));
+
+        ListingStorage storage = new ListingStorage(List.of());
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                storage, INFOGRAPHICS, "assets");
+        agent.execute(context);
+
+        DesignDocument document = context.getDesignDocument();
+        List<ImageBox> rows = document.pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        assertEquals(3, rows.size(), "three points → three painted numbered-bar rows");
+        for (ImageBox row : rows) {
+            Asset asset = assetById(document, row.assetId());
+            String svg = new String(storage.stored.get(asset.storedRef()), StandardCharsets.UTF_8);
+            assertTrue(svg.startsWith("<svg") && svg.contains("<circle"),
+                    "each row asset is a painted SVG with its numbered disc: " + asset.storedRef());
+        }
+        // three labels as text (selectable, editable), none as ARTICLE_BODY
+        long labels = document.pages().stream().flatMap(p -> p.components().stream())
+                .filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).count();
+        assertEquals(3, labels, "each point label is a real text box");
+    }
+
+    @Test
+    void twoPointsAreNotEnoughForAnInfographic() {
+        ContentItem item = new ContentItem("Apollo", "summary", BusinessCategory.PROJECT_UPDATES,
+                ItemType.PROJECT, List.of(), List.of());
+        GeneratedArticle article = new GeneratedArticle("Apollo lands on time",
+                "A short project body.", new PlannedItem(item, 9, "notable"),
+                List.of(new GeneratedArticle.Point("Discovery", "done"),
+                        new GeneratedArticle.Point("Build", "done")));
+        GeneratedSection section = new GeneratedSection(NewsletterSection.PROJECT_UPDATES, List.of(article));
+        PipelineContext context = new PipelineContext("job-1", List.of());
+        context.setGeneratedNewsletter(new GeneratedNewsletter("Test Issue", List.of(section)));
+
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of()), INFOGRAPHICS, "assets");
+        agent.execute(context);
+
+        assertTrue(context.getDesignDocument().pages().stream()
+                        .flatMap(p -> p.components().stream())
+                        .noneMatch(c -> c instanceof ImageBox box && box.assetId() != null
+                                && box.assetId().startsWith("decor-infographic-")),
+                "two points fall back to the plain patterns — an infographic is earned, not forced");
+    }
+
+    @Test
     void plainTemplateAttachesNoDecorAssets() {
         DesignCompositionAgent agent = new DesignCompositionAgent(PLAIN_TEMPLATES, new LayoutEngine(),
-                new ListingStorage(List.of()), "assets");
+                new ListingStorage(List.of()), INFOGRAPHICS, "assets");
         PipelineContext context = contextWithNewsletter();
 
         agent.execute(context);

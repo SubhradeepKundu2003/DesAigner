@@ -21,5 +21,12 @@ public enum SectionPattern {
      */
     KPI_TILES,
     /** Compact one-line-per-item list, for sections like Upcoming Events. */
-    EVENT_LIST
+    EVENT_LIST,
+    /**
+     * A single article whose enumerable points (steps, pillars, categories —
+     * from the generation agent's {@code POINT:} protocol) are rendered as a
+     * branded infographic chosen from the {@code infographics/} spec catalog
+     * by {@code InfographicSelector} — body prose stays below the graphic.
+     */
+    INFOGRAPHIC
 }

@@ -46,6 +46,8 @@
       },
       "Kpi" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 24.0, "fontWeight" : "bold", "colorRole" : "primary", "lineHeightPt" : 28.0, "align" : "center" },
       "KpiLabel" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 9.0, "fontWeight" : "normal", "colorRole" : "muted", "lineHeightPt" : 12.0, "align" : "center" },
+      "InfographicLabel" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 11.0, "fontWeight" : "bold", "colorRole" : "background", "lineHeightPt" : 14.0 },
+      "InfographicBody" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 9.0, "fontWeight" : "normal", "colorRole" : "background", "lineHeightPt" : 12.0 },
       "IssueTitle" : {
         "fontFamily" : "Helvetica Neue",
         "fontSizePt" : 28.0,
