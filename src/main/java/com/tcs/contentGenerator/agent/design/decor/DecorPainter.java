@@ -29,6 +29,16 @@ public final class DecorPainter {
         return svg(w, h, gradientDef(from, to, spec.angle()) + shape);
     }
 
+    /**
+     * Soft full-bleed section background: a low-opacity tint of the section's
+     * own type color ({@code colorRole}), so every section reads as its own
+     * gently-colored block without darkening the text beneath it.
+     */
+    public static String sectionTint(String colorRole, Theme theme, double w, double h) {
+        return svg(w, h, "<rect x=\"0\" y=\"0\" width=\"%s\" height=\"%s\" fill=\"%s\" fill-opacity=\"0.10\"/>"
+                .formatted(fmt(w), fmt(h), color(theme, colorRole)));
+    }
+
     /** Soft rounded tint behind a section icon/dot. */
     public static String chip(Decor.SectionHeader spec, Theme theme, double w, double h) {
         return svg(w, h,
@@ -143,9 +153,12 @@ public final class DecorPainter {
     }
 
     private static String svg(double w, double h, String content) {
+        // viewBox stays sub-pixel precise (content scales to it); the intrinsic
+        // width/height must be integers — openhtmltopdf/Batik reject a decimal
+        // dimension ("Invalid integer passed as dimension for SVG: 595.28").
         return ("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 %s %s\" "
-                + "width=\"%s\" height=\"%s\">%s</svg>")
-                .formatted(fmt(w), fmt(h), fmt(w), fmt(h), content);
+                + "width=\"%d\" height=\"%d\">%s</svg>")
+                .formatted(fmt(w), fmt(h), (int) Math.ceil(w), (int) Math.ceil(h), content);
     }
 
     private static String color(Theme theme, String role) {

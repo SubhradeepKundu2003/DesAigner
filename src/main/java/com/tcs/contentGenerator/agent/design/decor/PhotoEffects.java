@@ -34,6 +34,10 @@ public final class PhotoEffects {
     private static final int SHADOW_MARGIN_MIN_PX = 10;
     private static final float SHADOW_ALPHA = 0.35f;
     private static final int BLUR_RADIUS_PX = 4;
+    /** Faded-border feather: a soft dark ring hugging the inner clip edge. */
+    private static final float FEATHER_ALPHA = 0.28f;
+    private static final double FEATHER_STROKE_FRACTION = 0.06;
+    private static final int FEATHER_STROKE_MIN_PX = 6;
 
     private PhotoEffects() {
     }
@@ -68,6 +72,11 @@ public final class PhotoEffects {
             }
             g.setClip(clip);
             drawCropToFill(g, source, photoX, photoY, photoW, photoH);
+            if (spec.fadedBorder()) {
+                // drawn while the clip is still set, so only the inner half of the
+                // blurred edge ring shows — the photo fades into the page
+                g.drawImage(edgeFeather(outWidth, outHeight, clip), 0, 0, null);
+            }
         } finally {
             g.dispose();
         }
@@ -96,6 +105,28 @@ public final class PhotoEffects {
         g.drawImage(source,
                 (int) x, (int) y, (int) (x + w), (int) (y + h),
                 sx, sy, (int) (sx + cropW), (int) (sy + cropH), null);
+    }
+
+    /**
+     * A soft dark ring on the clip boundary: stroke the clip shape translucent,
+     * then box-blur it twice. Drawn over the photo while the clip is active, so
+     * only its inner half survives — a feathered "faded border".
+     */
+    private static BufferedImage edgeFeather(int width, int height, Shape clip) {
+        BufferedImage layer = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = layer.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int strokePx = Math.max(FEATHER_STROKE_MIN_PX,
+                    (int) (Math.min(width, height) * FEATHER_STROKE_FRACTION));
+            g.setStroke(new java.awt.BasicStroke(strokePx));
+            g.setColor(new Color(0f, 0f, 0f, FEATHER_ALPHA));
+            g.draw(clip);
+        } finally {
+            g.dispose();
+        }
+        ConvolveOp blur = boxBlur();
+        return blur.filter(blur.filter(layer, null), null);
     }
 
     /** The clip shape, offset downward, filled translucent black, box-blurred twice (≈ gaussian). */

@@ -71,6 +71,24 @@ class PhotoEffectsTest {
     }
 
     @Test
+    void fadedBorderDarkensTheInnerEdgeButNotTheCenter() throws Exception {
+        byte[] plain = PhotoEffects.treat(solidPng(300, 200, Color.BLUE), 200, 120,
+                new Decor.Photo("none", 0, false, null, false), 0);
+        byte[] faded = PhotoEffects.treat(solidPng(300, 200, Color.BLUE), 200, 120,
+                new Decor.Photo("none", 0, false, null, true), 0);
+        BufferedImage plainImg = decode(plain);
+        BufferedImage fadedImg = decode(faded);
+        // an inner-edge pixel: the feather darkens the blue channel there
+        int plainEdgeBlue = plainImg.getRGB(2, 60) & 0xFF;
+        int fadedEdgeBlue = fadedImg.getRGB(2, 60) & 0xFF;
+        assertTrue(fadedEdgeBlue < plainEdgeBlue,
+                "faded border must darken the inner edge (" + fadedEdgeBlue + " vs " + plainEdgeBlue + ")");
+        // the photo center is untouched
+        assertEquals(plainImg.getRGB(100, 60), fadedImg.getRGB(100, 60),
+                "the photo center is unchanged by the faded border");
+    }
+
+    @Test
     void undecodableSourceThrowsIoException() {
         assertThrows(IOException.class, () -> PhotoEffects.treat(new byte[] {1, 2, 3}, 100, 100,
                 new Decor.Photo("none", 0, false, null), 0));

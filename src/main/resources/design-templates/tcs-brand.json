@@ -27,6 +27,8 @@
       "SectionTitleKicker": { "fontFamily": "Houschka Rounded", "fontSizePt": 15, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 19 },
       "Stat": { "fontFamily": "Houschka Rounded", "fontSizePt": 32, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 36 },
       "StatLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
+      "Kpi": { "fontFamily": "Houschka Rounded", "fontSizePt": 24, "fontWeight": "bold", "colorRole": "primary", "lineHeightPt": 28, "align": "center" },
+      "KpiLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12, "align": "center" },
       "EventItem": { "fontFamily": "Houschka Rounded", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
     }
   },
@@ -35,8 +37,8 @@
     "masthead": { "style": "gradient-band", "from": "secondary", "to": "primary", "angle": 0, "heightPt": 130, "edge": "wave" },
     "sectionHeader": { "style": "chip", "colorRole": "primary", "kicker": true },
     "hero": { "style": "photo-led", "fill": "surface", "accent": "secondary" },
-    "sectionBand": { "fill": "surface" },
-    "photo": { "clip": "rounded", "cornerRadiusPt": 12, "shadow": true, "placement": "side" },
+    "sectionBand": { "fill": "surface", "style": "per-section" },
+    "photo": { "clip": "rounded", "cornerRadiusPt": 12, "shadow": true, "placement": "side", "fadedBorder": true },
     "cards": { "fill": "surface" },
     "statCard": { "fill": "surface", "accent": "secondary", "shadow": true },
     "footer": { "style": "band", "from": "secondary", "to": "primary" }

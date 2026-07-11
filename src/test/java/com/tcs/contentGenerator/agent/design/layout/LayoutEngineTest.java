@@ -597,6 +597,88 @@ class LayoutEngineTest {
     }
 
     @Test
+    void kpiTilesLayOutAsARowOfStatCards() {
+        DesignTemplate base = decorTemplate(); // has statCard decor
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        List<SectionComposition.Stat> stats = List.of(
+                new SectionComposition.Stat("72", "NPS"),
+                new SectionComposition.Stat("18%", "growth"),
+                new SectionComposition.Stat("4.6", "rating"));
+        GeneratedArticle article = new GeneratedArticle("Delivery headline",
+                "A short delivery body with a couple of sentences.", null);
+        SectionComposition section = new SectionComposition(NewsletterSection.DELIVERY_HIGHLIGHTS,
+                SectionPattern.KPI_TILES, List.of(article), "primary", null, null, null, stats);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> tiles = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-statcard-"))
+                .toList();
+        assertTrue(tiles.size() == 3, "one stat-card per KPI tile, got " + tiles.size());
+        // all three tiles share the row (top + uniform height) and march left to right
+        for (int i = 1; i < tiles.size(); i++) {
+            assertTrue(Math.abs(tiles.get(i).frame().y() - tiles.get(0).frame().y()) < EPSILON,
+                    "tiles share the row top");
+            assertTrue(Math.abs(tiles.get(i).frame().h() - tiles.get(0).frame().h()) < EPSILON,
+                    "tiles share a uniform height");
+            assertTrue(tiles.get(i).frame().x() > tiles.get(i - 1).frame().x(),
+                    "tiles are laid left to right");
+        }
+        assertTrue(all.stream().filter(c -> c.role() == ComponentRole.STAT_VALUE).count() == 3
+                        && all.stream().filter(c -> c.role() == ComponentRole.STAT_LABEL).count() == 3,
+                "three value and three label boxes");
+        for (ImageBox tile : tiles) {
+            assertTrue(all.stream().anyMatch(c -> c.role() == ComponentRole.STAT_VALUE
+                            && c.frame().x() >= tile.frame().x() - EPSILON
+                            && c.frame().y() >= tile.frame().y() - EPSILON
+                            && c.frame().x() + c.frame().w() <= tile.frame().x() + tile.frame().w() + EPSILON
+                            && c.frame().y() + c.frame().h() <= tile.frame().y() + tile.frame().h() + EPSILON),
+                    "each tile contains a stat value");
+        }
+        assertTrue(all.stream().anyMatch(c -> c.role() == ComponentRole.ARTICLE_BODY),
+                "the article body still renders below the KPI row");
+    }
+
+    @Test
+    void perSectionBandTintsEverySectionByItsOwnRole() {
+        DesignTemplate base = editorialTemplate();
+        var d = base.decor();
+        DesignTemplate perSection = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 1600), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                new com.tcs.contentGenerator.agent.design.Decor(null, d.masthead(), d.sectionHeader(), d.hero(),
+                        new com.tcs.contentGenerator.agent.design.Decor.SectionBand("surface", "per-section"),
+                        d.photo(), d.cards(), d.statCard(), d.footer()));
+        DesignDocument document = new LayoutEngine().layout(fixturePlan(), perSection, "Test Issue", "job-1");
+
+        List<ImageBox> tints = document.pages().stream().flatMap(p -> p.components().stream())
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-sectiontint-"))
+                .toList();
+        // 5 fixture sections; page-crossing ones skip their band — most still get one
+        assertTrue(tints.size() >= 3, "expected most sections to get a tint band, got " + tints.size());
+        for (ImageBox tint : tints) {
+            assertTrue(Math.abs(tint.frame().x()) < EPSILON
+                            && Math.abs(tint.frame().w() - PAGE_WIDTH) < EPSILON,
+                    "section tint must be full-bleed");
+        }
+        // each tint carries its section's own type color role (decor-sectiontint-<role>-<id>)
+        List<String> roles = tints.stream().map(b -> b.assetId().split("-")[2]).distinct().toList();
+        assertTrue(roles.contains("primary") && roles.contains("secondary"),
+                "sections are tinted by their own type color, got roles " + roles);
+        // per-section mode bakes tints as ImageBoxes, not solid surface ShapeBoxes
+        assertTrue(document.pages().stream().flatMap(p -> p.components().stream())
+                        .noneMatch(c -> c instanceof com.tcs.contentGenerator.design.ShapeBox s
+                                && s.role() == ComponentRole.DECORATION && "surface".equals(s.fillColorRole())),
+                "no solid surface ShapeBox bands in per-section mode");
+    }
+
+    @Test
     void decorlessTemplateProducesNoDecorationComponents() {
         DesignDocument document = new LayoutEngine().layout(fixturePlan(), fixtureTemplate(), "Test Issue", "job-1");
         assertTrue(document.pages().stream().flatMap(p -> p.components().stream())

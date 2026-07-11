@@ -67,12 +67,21 @@ public record Decor(Cover cover, Masthead masthead, SectionHeader sectionHeader,
     }
 
     /**
-     * Full-bleed tint band behind every other section — placed as a
-     * {@code ShapeBox} (not a baked image) so the review agent's contrast
-     * lint can still reason about text on it. Sections that cross a page
-     * break skip their band (v1 trade-off).
+     * Full-bleed tint band behind sections. {@code style} "per-section" gives
+     * <em>every</em> section a soft low-opacity tint of its own section-type
+     * color (a baked SVG, so any theme role can tint without a solid fill) —
+     * the infographic look. Anything else (including null) keeps the original
+     * behavior: a solid {@code fill}-role {@code ShapeBox} behind every
+     * <em>other</em> section, which the review agent's contrast lint can still
+     * reason about. Sections that cross a page break skip their band (v1
+     * trade-off).
      */
-    public record SectionBand(String fill) {
+    public record SectionBand(String fill, String style) {
+
+        /** Alternating solid band — the pre-per-section behavior; keeps call sites unchanged. */
+        public SectionBand(String fill) {
+            this(fill, null);
+        }
     }
 
     /**
@@ -82,9 +91,17 @@ public record Decor(Cover cover, Masthead masthead, SectionHeader sectionHeader,
      * {@code placement} "side" lays STANDARD-section articles out with their
      * photo <em>beside</em> the text, alternating right/left across the issue
      * (magazine style); anything else (including null) keeps one photo slot
-     * below each eligible section's content.
+     * below each eligible section's content. {@code fadedBorder} adds a soft
+     * feathered inner edge so the photo blends into the page rather than ending
+     * on a hard cut.
      */
-    public record Photo(String clip, double cornerRadiusPt, boolean shadow, String placement) {
+    public record Photo(String clip, double cornerRadiusPt, boolean shadow, String placement,
+            boolean fadedBorder) {
+
+        /** No faded border — keeps existing call sites unchanged. */
+        public Photo(String clip, double cornerRadiusPt, boolean shadow, String placement) {
+            this(clip, cornerRadiusPt, shadow, placement, false);
+        }
     }
 
     /** Rounded card with a left accent bar behind the stat value/label row. */

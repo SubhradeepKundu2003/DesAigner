@@ -24,6 +24,8 @@
       "SectionTitleKicker": { "fontFamily": "Inter", "fontSizePt": 15, "fontWeight": "bold", "colorRole": "primary", "lineHeightPt": 19 },
       "Stat": { "fontFamily": "Inter", "fontSizePt": 32, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 36 },
       "StatLabel": { "fontFamily": "Inter", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
+      "Kpi": { "fontFamily": "Inter", "fontSizePt": 24, "fontWeight": "bold", "colorRole": "primary", "lineHeightPt": 28, "align": "center" },
+      "KpiLabel": { "fontFamily": "Inter", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12, "align": "center" },
       "EventItem": { "fontFamily": "Inter", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
     }
   },
@@ -31,8 +33,8 @@
     "masthead": { "style": "gradient-band", "from": "secondary", "to": "background", "angle": 0, "heightPt": 130, "edge": "wave" },
     "sectionHeader": { "style": "chip", "colorRole": "primary", "kicker": true },
     "hero": { "style": "panel", "fill": "surface", "accent": "primary" },
-    "sectionBand": { "fill": "surface" },
-    "photo": { "clip": "ellipse", "cornerRadiusPt": 12, "shadow": true },
+    "sectionBand": { "fill": "surface", "style": "per-section" },
+    "photo": { "clip": "ellipse", "cornerRadiusPt": 12, "shadow": true, "fadedBorder": true },
     "statCard": { "fill": "surface", "accent": "primary", "shadow": true },
     "footer": { "style": "band", "from": "primary", "to": "background" }
   }

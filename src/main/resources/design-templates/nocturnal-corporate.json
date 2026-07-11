@@ -44,6 +44,8 @@
         "colorRole" : "muted",
         "lineHeightPt" : 12.0
       },
+      "Kpi" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 24.0, "fontWeight" : "bold", "colorRole" : "primary", "lineHeightPt" : 28.0, "align" : "center" },
+      "KpiLabel" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 9.0, "fontWeight" : "normal", "colorRole" : "muted", "lineHeightPt" : 12.0, "align" : "center" },
       "IssueTitle" : {
         "fontFamily" : "Helvetica Neue",
         "fontSizePt" : 28.0,
@@ -123,13 +125,15 @@
       "accent" : "primary"
     },
     "sectionBand" : {
-      "fill" : "surface"
+      "fill" : "surface",
+      "style" : "per-section"
     },
     "photo" : {
       "clip" : "rounded",
       "cornerRadiusPt" : 12.0,
       "shadow" : false,
-      "placement" : "side"
+      "placement" : "side",
+      "fadedBorder" : true
     },
     "cards" : { "fill" : "surface" },
     "statCard" : {

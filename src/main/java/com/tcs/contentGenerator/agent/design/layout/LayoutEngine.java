@@ -61,6 +61,8 @@ public class LayoutEngine {
     private static final double BAND_PADDING = 16;
     private static final double CHIP_SIZE = 20;
     private static final double CARD_PADDING = 12;
+    /** Gap between a KPI tile's big value and its label below it. */
+    private static final double KPI_VALUE_LABEL_GAP = 2;
     private static final double FOOTER_HEIGHT = 8;
     /** Title style used on a masthead band when the theme defines it. */
     private static final String ON_BAND_TITLE_STYLE = "IssueTitleOnBand";
@@ -117,7 +119,11 @@ public class LayoutEngine {
                 placeDivider(p, theme);
                 p.advance(PARAGRAPH_GAP);
             }
-            boolean banded = decor != null && decor.sectionBand() != null && i % 2 == 1;
+            boolean perSectionTint = decor != null && decor.sectionBand() != null
+                    && "per-section".equals(decor.sectionBand().style());
+            // per-section: every section is tinted; alternating: every other one
+            boolean banded = decor != null && decor.sectionBand() != null
+                    && (perSectionTint || i % 2 == 1);
             int bandPage = p.pageIndex();
             int bandPosition = p.positionOnCurrentPage();
             double bandTop = p.y() - BAND_BLEED;
@@ -125,13 +131,22 @@ public class LayoutEngine {
             p.advance(PARAGRAPH_GAP);
             layoutSection(p, section, theme, decor, sideImageCounter);
             if (banded && p.pageIndex() == bandPage) {
-                // full-bleed tint behind the whole section; a ShapeBox (not a baked
-                // image) so the contrast lint can still judge text on it. Sections
-                // that crossed a page break simply skip their band.
-                p.insertOnPage(bandPage, bandPosition, new ShapeBox(p.nextId(), ComponentRole.DECORATION,
-                        new Frame(0, Math.max(0, bandTop), theme.pageSize().widthPt(),
-                                p.y() + BAND_BLEED - Math.max(0, bandTop)),
-                        0, true, null, "rect", decor.sectionBand().fill()));
+                // full-bleed tint behind the whole section. Sections that crossed a
+                // page break simply skip their band.
+                Frame bandFrame = new Frame(0, Math.max(0, bandTop), theme.pageSize().widthPt(),
+                        p.y() + BAND_BLEED - Math.max(0, bandTop));
+                if (perSectionTint) {
+                    // a baked SVG tinted by this section's own type color — the role
+                    // is carried in the asset id so the composition agent can paint it
+                    String id = p.nextId();
+                    p.insertOnPage(bandPage, bandPosition, new ImageBox(id, ComponentRole.DECORATION, bandFrame,
+                            0, true, null, DECOR_ASSET_PREFIX + "sectiontint-" + section.iconColorRole() + "-" + id,
+                            "section tint"));
+                } else {
+                    // solid ShapeBox (not a baked image) so the contrast lint can still judge text on it
+                    p.insertOnPage(bandPage, bandPosition, new ShapeBox(p.nextId(), ComponentRole.DECORATION,
+                            bandFrame, 0, true, null, "rect", decor.sectionBand().fill()));
+                }
             }
             p.advance(SECTION_GAP);
         }
@@ -221,6 +236,7 @@ public class LayoutEngine {
         switch (section.pattern()) {
             case HERO -> layoutHero(p, section, theme, decor);
             case STAT_CALLOUT -> layoutStatCallout(p, section, theme, decor);
+            case KPI_TILES -> layoutKpiTiles(p, section, theme, decor);
             case EVENT_LIST -> layoutEventList(p, section, theme);
             case TWO_COLUMN -> layoutTwoColumn(p, section, theme);
             case STANDARD -> {
@@ -558,6 +574,69 @@ public class LayoutEngine {
                 ComponentRole.STAT_VALUE, "Stat", section.statValue(), link);
         addTextAt(p, p.x() + pad + statWidth, y + pad, labelWidth, total - 2 * pad,
                 ComponentRole.STAT_LABEL, "StatLabel", section.statLabel(), link);
+        p.advance(total);
+        p.advance(PARAGRAPH_GAP);
+
+        placeArticleBody(p, article.body(), link, p.contentWidth(), theme);
+    }
+
+    /**
+     * KPI tiles: a single article's two-or-more numeric metrics laid out as a
+     * horizontal row of tiles (big value over a short label), the article
+     * headline above and body below — the infographic sibling of
+     * {@link #layoutStatCallout}. Each tile reuses the stat-card decoration
+     * ({@code decor-statcard-*}, drawn only when the template defines
+     * {@code statCard}) and the {@code STAT_VALUE}/{@code STAT_LABEL} roles, so
+     * the renderers and the review agent's contrast lint already handle it. The
+     * tiles are centered when the theme defines the optional {@code Kpi}/
+     * {@code KpiLabel} styles, else they fall back to {@code Stat}/{@code StatLabel}.
+     */
+    private void layoutKpiTiles(Paginator p, SectionComposition section, Theme theme, Decor decor) {
+        if (section.articles().isEmpty() || section.stats().size() < 2) {
+            return;
+        }
+        GeneratedArticle article = section.articles().get(0);
+        SourceLink link = new SourceLink(section.section().title(), article.headline());
+
+        placeText(p, ComponentRole.ARTICLE_HEADLINE, "Headline", styleOf(theme, "Headline"),
+                article.headline(), link, p.contentWidth());
+        p.advance(PARAGRAPH_GAP);
+
+        List<SectionComposition.Stat> stats = section.stats();
+        int n = stats.size();
+        boolean card = decor != null && decor.statCard() != null;
+        double pad = card ? CARD_PADDING : 0;
+        double gutter = theme.spacing().gutterPt();
+        double tileWidth = (p.contentWidth() - (n - 1) * gutter) / n;
+        double innerWidth = tileWidth - 2 * pad;
+        String valueRef = theme.textStyles().containsKey("Kpi") ? "Kpi" : "Stat";
+        String labelRef = theme.textStyles().containsKey("KpiLabel") ? "KpiLabel" : "StatLabel";
+        TextStyle valueStyle = styleOf(theme, valueRef);
+        TextStyle labelStyle = styleOf(theme, labelRef);
+
+        // uniform tile height so the row reads as one band, whatever each tile measures
+        double content = 0;
+        for (SectionComposition.Stat stat : stats) {
+            content = Math.max(content, measurer.heightOf(stat.value(), valueStyle, innerWidth)
+                    + KPI_VALUE_LABEL_GAP + measurer.heightOf(stat.label(), labelStyle, innerWidth));
+        }
+        double total = p.reserve(content + 2 * pad, "kpi-tiles:" + section.section().title());
+        double y = p.y();
+        double x = p.x();
+        for (SectionComposition.Stat stat : stats) {
+            if (card) {
+                String id = p.nextId();
+                p.add(new ImageBox(id, ComponentRole.DECORATION, new Frame(x, y, tileWidth, total),
+                        0, true, null, DECOR_ASSET_PREFIX + "statcard-" + id, "kpi tile"));
+            }
+            double valueHeight = measurer.heightOf(stat.value(), valueStyle, innerWidth);
+            addTextAt(p, x + pad, y + pad, innerWidth, valueHeight,
+                    ComponentRole.STAT_VALUE, valueRef, stat.value(), link);
+            double labelHeight = measurer.heightOf(stat.label(), labelStyle, innerWidth);
+            addTextAt(p, x + pad, y + pad + valueHeight + KPI_VALUE_LABEL_GAP, innerWidth, labelHeight,
+                    ComponentRole.STAT_LABEL, labelRef, stat.label(), link);
+            x += tileWidth + gutter;
+        }
         p.advance(total);
         p.advance(PARAGRAPH_GAP);
 

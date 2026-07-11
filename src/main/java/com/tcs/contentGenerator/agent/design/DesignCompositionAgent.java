@@ -46,6 +46,16 @@ public class DesignCompositionAgent implements Agent {
     private static final Logger log = LoggerFactory.getLogger(DesignCompositionAgent.class);
     /** Same figure shape used by fact validation and brand compliance. */
     private static final Pattern NUMBER = Pattern.compile("\\d[\\d,]*(?:\\.\\d+)?");
+    /**
+     * KPI-tile value: a figure plus an optional ratio denominator and/or trailing
+     * percent, so "18%" and "4.6/5" each stay whole rather than leaving a stray
+     * "5" in the label.
+     */
+    private static final Pattern KPI_VALUE = Pattern.compile("\\d[\\d,]*(?:\\.\\d+)?(?:/\\d+)?%?");
+    /** More than a handful of tiles gets too thin on an A4 column — take the first few. */
+    private static final int MAX_KPI_TILES = 4;
+    /** Separators stripped from a metric string once its value is pulled out, to leave a clean label. */
+    private static final Pattern KPI_LABEL_NOISE = Pattern.compile("[:\\-–—/]");
 
     private static final String BRAND_LOGO_FOLDER = "BRAND";
     /** Chosen per theme: black on light page backgrounds (brand-guide preference),
@@ -140,6 +150,11 @@ public class DesignCompositionAgent implements Agent {
                     iconAssetId, null, null);
         }
         if (articles.size() == 1) {
+            List<SectionComposition.Stat> stats = extractStats(articles.get(0));
+            if (stats.size() >= 2) {
+                return new SectionComposition(newsletterSection, SectionPattern.KPI_TILES, articles,
+                        iconColorRole, iconAssetId, null, null, stats);
+            }
             String[] stat = extractStat(articles.get(0));
             if (stat != null) {
                 return new SectionComposition(newsletterSection, SectionPattern.STAT_CALLOUT, articles,
@@ -213,6 +228,13 @@ public class DesignCompositionAgent implements Agent {
                             box.frame().w(), box.frame().h());
                     case "card" -> DecorPainter.card(decor.cards(), template.theme(),
                             box.frame().w(), box.frame().h());
+                    case "sectiontint" -> {
+                        // asset id is decor-sectiontint-<role>-<cmpId>: the section's own type color
+                        String role = box.assetId().substring(LayoutEngine.DECOR_ASSET_PREFIX.length())
+                                .split("-")[1];
+                        yield DecorPainter.sectionTint(role, template.theme(),
+                                box.frame().w(), box.frame().h());
+                    }
                     default -> null;
                 };
                 if (svg == null) {
@@ -225,6 +247,34 @@ public class DesignCompositionAgent implements Agent {
             }
         }
         return assets;
+    }
+
+    /**
+     * Every numeric key metric of the article turned into a KPI {@link
+     * SectionComposition.Stat} (value = the figure with an optional trailing
+     * percent; label = the rest of the metric string, separators cleaned),
+     * capped at {@link #MAX_KPI_TILES}. Empty when the article has no source or
+     * fewer than one numeric metric — the caller only uses a row of two or more.
+     */
+    private List<SectionComposition.Stat> extractStats(GeneratedArticle article) {
+        if (article.source() == null) {
+            return List.of();
+        }
+        List<SectionComposition.Stat> stats = new ArrayList<>();
+        for (String metric : article.source().item().keyMetrics()) {
+            Matcher matcher = KPI_VALUE.matcher(metric);
+            if (!matcher.find()) {
+                continue;
+            }
+            String value = matcher.group();
+            String label = KPI_LABEL_NOISE.matcher(metric.substring(0, matcher.start())
+                    + metric.substring(matcher.end())).replaceAll(" ").replaceAll("\\s+", " ").strip();
+            stats.add(new SectionComposition.Stat(value, label.isEmpty() ? metric.strip() : label));
+            if (stats.size() == MAX_KPI_TILES) {
+                break;
+            }
+        }
+        return stats;
     }
 
     /**

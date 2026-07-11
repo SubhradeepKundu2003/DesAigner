@@ -14,6 +14,12 @@ public enum SectionPattern {
     TWO_COLUMN,
     /** A single article with a key metric pulled out into a large stat + label. */
     STAT_CALLOUT,
+    /**
+     * A single article carrying two or more numeric key metrics, pulled out into
+     * a horizontal row of KPI tiles (big value + label each) above the body —
+     * an infographic extension of {@link #STAT_CALLOUT}.
+     */
+    KPI_TILES,
     /** Compact one-line-per-item list, for sections like Upcoming Events. */
     EVENT_LIST
 }

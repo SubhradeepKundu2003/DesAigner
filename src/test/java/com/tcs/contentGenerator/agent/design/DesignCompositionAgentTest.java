@@ -16,10 +16,15 @@ import com.tcs.contentGenerator.agent.generation.GeneratedArticle;
 import com.tcs.contentGenerator.agent.generation.GeneratedNewsletter;
 import com.tcs.contentGenerator.agent.generation.GeneratedSection;
 import com.tcs.contentGenerator.agent.planning.NewsletterSection;
+import com.tcs.contentGenerator.agent.planning.PlannedItem;
+import com.tcs.contentGenerator.agent.understanding.BusinessCategory;
+import com.tcs.contentGenerator.agent.understanding.ContentItem;
+import com.tcs.contentGenerator.agent.understanding.ItemType;
 import com.tcs.contentGenerator.design.Asset;
 import com.tcs.contentGenerator.design.ComponentRole;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.ImageBox;
+import com.tcs.contentGenerator.design.TextBox;
 import com.tcs.contentGenerator.orchestrator.PipelineContext;
 import com.tcs.contentGenerator.storage.StorageService;
 import tools.jackson.databind.json.JsonMapper;
@@ -178,6 +183,38 @@ class DesignCompositionAgentTest {
             assertTrue(asset.storedRef().startsWith("jobs/job-1/decor/"),
                     "decor assets live under the job's decor folder");
         }
+    }
+
+    @Test
+    void singleArticleWithMultipleMetricsBecomesAKpiTileRow() {
+        ContentItem item = new ContentItem("Delivery", "summary", BusinessCategory.DELIVERY_HIGHLIGHTS,
+                ItemType.METRIC, List.of("NPS: 72", "Growth 18%", "Rating 4.6/5"), List.of());
+        GeneratedArticle article = new GeneratedArticle("Delivery headline",
+                "A short delivery highlights body.", new PlannedItem(item, 9, "high impact"));
+        GeneratedSection section = new GeneratedSection(NewsletterSection.DELIVERY_HIGHLIGHTS, List.of(article));
+        PipelineContext context = new PipelineContext("job-1", List.of());
+        context.setGeneratedNewsletter(new GeneratedNewsletter("Test Issue", List.of(section)));
+
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of()), "assets");
+        agent.execute(context);
+
+        // three numeric metrics → three KPI tiles, each a STAT_VALUE box; the
+        // figure (with its percent) is kept, the rest becomes the label
+        List<String> values = context.getDesignDocument().pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(TextBox.class::isInstance).map(TextBox.class::cast)
+                .filter(b -> b.role() == ComponentRole.STAT_VALUE)
+                .map(TextBox::text).toList();
+        assertEquals(List.of("72", "18%", "4.6/5"), values,
+                "each numeric metric becomes a KPI tile value (percent and ratio kept whole)");
+        // each tile sits on its own stat-card decoration (reused machinery)
+        long tileCards = context.getDesignDocument().pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-statcard-"))
+                .count();
+        assertEquals(3, tileCards, "one stat-card decoration per KPI tile");
     }
 
     @Test
