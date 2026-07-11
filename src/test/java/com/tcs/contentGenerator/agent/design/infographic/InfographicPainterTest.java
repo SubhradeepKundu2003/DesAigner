@@ -69,6 +69,17 @@ class InfographicPainterTest {
     }
 
     @Test
+    void timelineNodeCarriesAConnectorLineAndACenteredNode() throws Exception {
+        String svg = InfographicPainter.timelineNode(THEME, "divider", "primary", 2, 240, 60);
+        assertTrue(svg.contains("<line"), "vertical connector line present");
+        assertTrue(svg.contains("#D9D9D9"), "line carries the resolved divider color");
+        assertTrue(svg.contains("#4E84C4"), "node carries the resolved primary color");
+        assertTrue(svg.contains(">02<"), "two-digit item number painted");
+        BufferedImage image = rasterize(svg);
+        assertEquals(240, image.getWidth());
+    }
+
+    @Test
     void encodePaintRoundTripSurvivesTheAssetId() throws Exception {
         String params = InfographicPainter.encode(
                 new InfographicSpec.Shape("numberedBars", "primary", "text"), 2);
@@ -88,6 +99,7 @@ class InfographicPainterTest {
     void allThreeKindsDispatchThroughPaint() throws Exception {
         rasterize(InfographicPainter.paint("chevronBars.primary.secondary.1", THEME, 480, 40));
         rasterize(InfographicPainter.paint("pointCard.surface.primary.2", THEME, 240, 140));
+        rasterize(InfographicPainter.paint("timelineNode.divider.primary.3", THEME, 240, 60));
     }
 
     private static BufferedImage rasterize(String svg) throws Exception {

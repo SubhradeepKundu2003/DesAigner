@@ -50,6 +50,8 @@
       "InfographicBody" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 9.0, "fontWeight" : "normal", "colorRole" : "background", "lineHeightPt" : 12.0 },
       "InfographicCardLabel" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 11.0, "fontWeight" : "bold", "colorRole" : "text", "lineHeightPt" : 14.0 },
       "InfographicCardBody" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 9.0, "fontWeight" : "normal", "colorRole" : "muted", "lineHeightPt" : 12.0 },
+      "InfographicTimelineLabel" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 11.0, "fontWeight" : "bold", "colorRole" : "text", "lineHeightPt" : 14.0 },
+      "InfographicTimelineBody" : { "fontFamily" : "Helvetica Neue", "fontSizePt" : 9.0, "fontWeight" : "normal", "colorRole" : "muted", "lineHeightPt" : 12.0 },
       "IssueTitle" : {
         "fontFamily" : "Helvetica Neue",
         "fontSizePt" : 28.0,

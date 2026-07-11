@@ -842,4 +842,48 @@ class LayoutEngineTest {
         assertTrue(all.stream().filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).count() == 3,
                 "each card carries its point's label as real text");
     }
+
+    @Test
+    void timelineInfographicAlternatesPointsLeftAndRightOfTheConnector() {
+        DesignTemplate base = fixtureTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        var spec = infographicSpec("timeline",
+                com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.TIMELINE,
+                "timelineNode");
+        List<GeneratedArticle.Point> points = List.of(
+                new GeneratedArticle.Point("Discover", "Understand the problem space."),
+                new GeneratedArticle.Point("Design", "Shape the solution."),
+                new GeneratedArticle.Point("Deliver", "Ship and measure impact."));
+        GeneratedArticle article = new GeneratedArticle("Journey headline",
+                "A short journey body.", null, points);
+        SectionComposition section = new SectionComposition(NewsletterSection.INNOVATION_SPOTLIGHT,
+                SectionPattern.INFOGRAPHIC, List.of(article), "primary", null, null, null,
+                List.of(), spec, points);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> segments = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        assertTrue(segments.size() == 3, "one connector segment per point, got " + segments.size());
+        for (int i = 0; i < segments.size(); i++) {
+            assertTrue(segments.get(i).assetId().contains("timelineNode.primary.secondary." + (i + 1)),
+                    "segment " + i + " must encode the timeline shape kind: " + segments.get(i).assetId());
+            assertTrue(Math.abs(segments.get(i).frame().w()
+                            - (tallPage.theme().pageSize().widthPt() - 2 * MARGIN)) < EPSILON,
+                    "each segment spans the full content width so the line chains between rows");
+        }
+        List<Component> labels = all.stream()
+                .filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).toList();
+        assertTrue(labels.size() == 3, "each point carries its label as real text");
+        double contentMidX = segments.get(0).frame().x() + segments.get(0).frame().w() / 2;
+        assertTrue(labels.get(0).frame().x() < contentMidX, "point 1 sits left of the connector");
+        assertTrue(labels.get(1).frame().x() > contentMidX, "point 2 sits right of the connector");
+        assertTrue(labels.get(2).frame().x() < contentMidX, "point 3 sits left of the connector again");
+    }
 }

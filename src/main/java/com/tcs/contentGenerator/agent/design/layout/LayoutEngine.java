@@ -103,6 +103,13 @@ public class LayoutEngine {
     private static final String INFOGRAPHIC_TEXT_STYLE = "InfographicBody";
     private static final String INFOGRAPHIC_CARD_LABEL_STYLE = "InfographicCardLabel";
     private static final String INFOGRAPHIC_CARD_TEXT_STYLE = "InfographicCardBody";
+    /**
+     * TIMELINE's text sits beside the connector line, on the plain page
+     * background — not on a saturated fill like the bar rows — so it needs
+     * its own dark-text pair, same reasoning as the card styles above.
+     */
+    private static final String INFOGRAPHIC_TIMELINE_LABEL_STYLE = "InfographicTimelineLabel";
+    private static final String INFOGRAPHIC_TIMELINE_TEXT_STYLE = "InfographicTimelineBody";
     /** Vertical gap between an infographic point's label and its one-liner. */
     private static final double INFO_LABEL_TEXT_GAP = 2;
     /** Vertical gap between infographic rows. */
@@ -691,6 +698,8 @@ public class LayoutEngine {
 
         if ("pointCard".equals(section.infographic().shape().kind())) {
             layoutCardGrid(p, section, theme, link);
+        } else if ("timelineNode".equals(section.infographic().shape().kind())) {
+            layoutTimeline(p, section, theme, link);
         } else {
             // numberedBars/chevronBars share this row geometry — only the SVG
             // differs, resolved by InfographicPainter.paint from the shape kind
@@ -831,6 +840,57 @@ public class LayoutEngine {
             double textHeight = measurer.heightOf(point.text(), textStyle, innerWidth);
             addTextAt(p, x + InfographicPainter.CARD_PADDING, textY + labelHeight + INFO_LABEL_TEXT_GAP,
                     innerWidth, textHeight, ComponentRole.INFOGRAPHIC_TEXT, textRef, point.text(), link);
+        }
+    }
+
+    /**
+     * The TIMELINE shape: a connector line down the content column's
+     * horizontal center (painted per-row by {@code InfographicPainter
+     * .timelineNode}, chaining into one continuous line down the page), each
+     * point's label/one-liner alternating left/right of it — the "zigzag"
+     * reference look. Rows reserve individually like {@link #layoutBarRows}.
+     */
+    private void layoutTimeline(Paginator p, SectionComposition section, Theme theme, SourceLink link) {
+        String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_TIMELINE_LABEL_STYLE)
+                ? INFOGRAPHIC_TIMELINE_LABEL_STYLE : "Headline";
+        String textRef = theme.textStyles().containsKey(INFOGRAPHIC_TIMELINE_TEXT_STYLE)
+                ? INFOGRAPHIC_TIMELINE_TEXT_STYLE : "Body";
+        TextStyle labelStyle = styleOf(theme, labelRef);
+        TextStyle textStyle = styleOf(theme, textRef);
+        List<GeneratedArticle.Point> points = section.points();
+        double gutter = theme.spacing().gutterPt();
+        double centerColumn = InfographicPainter.TIMELINE_NODE + 2 * gutter;
+        double half = (p.contentWidth() - centerColumn) / 2;
+        double rightX = p.x() + half + centerColumn;
+
+        for (int i = 0; i < points.size(); i++) {
+            GeneratedArticle.Point point = points.get(i);
+            double labelHeight = measurer.heightOf(point.label(), labelStyle, half);
+            double textHeight = point.text().isBlank() ? 0
+                    : measurer.heightOf(point.text(), textStyle, half);
+            double content = labelHeight + (textHeight > 0 ? INFO_LABEL_TEXT_GAP + textHeight : 0);
+            double rowHeight = Math.max(content, InfographicPainter.TIMELINE_NODE + 4);
+            double h = p.reserve(rowHeight, "infographic-timeline:" + point.label());
+            double y = p.y();
+            String id = p.nextId();
+            p.add(new ImageBox(id, ComponentRole.DECORATION,
+                    new Frame(p.x(), y, p.contentWidth(), h), 0, true, null,
+                    DECOR_ASSET_PREFIX + "infographic-"
+                            + InfographicPainter.encode(section.infographic().shape(), i + 1)
+                            + "-" + id,
+                    "infographic timeline"));
+            double textX = i % 2 == 1 ? rightX : p.x();
+            double contentTop = y + Math.max(0, (h - content) / 2);
+            addTextAt(p, textX, contentTop, half, labelHeight,
+                    ComponentRole.INFOGRAPHIC_LABEL, labelRef, point.label(), link);
+            if (textHeight > 0) {
+                addTextAt(p, textX, contentTop + labelHeight + INFO_LABEL_TEXT_GAP, half,
+                        textHeight, ComponentRole.INFOGRAPHIC_TEXT, textRef, point.text(), link);
+            }
+            p.advance(h);
+            if (i < points.size() - 1) {
+                p.advance(INFO_ROW_GAP);
+            }
         }
     }
 

@@ -38,6 +38,7 @@ class InfographicCatalogTest {
         assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("numbered-bars")));
         assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("card-grid")));
         assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("kpi-bars")));
+        assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("timeline")));
     }
 
     @Test
@@ -54,6 +55,14 @@ class InfographicCatalogTest {
         assertEquals(InfographicSpec.Archetype.KPI_BARS, spec.archetype());
         assertTrue(spec.wantsNumbers(), "KPI_BARS must require every point to carry a figure");
         assertEquals("chevronBars", spec.shape().kind());
+    }
+
+    @Test
+    void loadsTheTimelineSpec() {
+        InfographicSpec spec = CATALOG.get("timeline");
+        assertEquals(InfographicSpec.Archetype.TIMELINE, spec.archetype());
+        assertEquals("timelineNode", spec.shape().kind());
+        assertFalse(spec.wantsNumbers());
     }
 
     @Test

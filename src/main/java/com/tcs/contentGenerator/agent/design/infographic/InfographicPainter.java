@@ -31,6 +31,8 @@ public final class InfographicPainter {
     /** Card badge size + padding for the {@code CARD_GRID} archetype. */
     public static final double CARD_BADGE = 26;
     public static final double CARD_PADDING = 12;
+    /** Node diameter for the {@code TIMELINE} archetype's central connector. */
+    public static final double TIMELINE_NODE = 24;
     private static final String SHADOW_FILTER = """
             <defs><filter id="s" x="-20%" y="-20%" width="140%" height="160%">\
             <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>\
@@ -57,6 +59,7 @@ public final class InfographicPainter {
             case "numberedBars" -> numberedBars(theme, role1, role2, number, w, h);
             case "chevronBars" -> chevronBars(theme, role1, role2, number, w, h);
             case "pointCard" -> pointCard(theme, role1, role2, number, w, h);
+            case "timelineNode" -> timelineNode(theme, role1, role2, number, w, h);
             default -> null;
         };
     }
@@ -108,6 +111,22 @@ public final class InfographicPainter {
         double cx = inset + CARD_PADDING + CARD_BADGE / 2;
         double cy = inset + CARD_PADDING + CARD_BADGE / 2;
         return svg(w, h, card + disc(theme, badgeFillRole, number, cx, cy, CARD_BADGE / 2));
+    }
+
+    /**
+     * One segment of the {@code TIMELINE} design: a vertical connector line
+     * down the frame's horizontal center with a numbered node centered on it.
+     * Consecutive rows' segments visually chain into one continuous line down
+     * the page; the label/one-liner text alternates left/right of the line
+     * (the "zigzag" reference look), placed by {@code LayoutEngine}.
+     */
+    public static String timelineNode(Theme theme, String lineFillRole, String nodeFillRole,
+            int number, double w, double h) {
+        String lineFill = color(theme, lineFillRole);
+        double cx = w / 2;
+        String line = "<line x1=\"%s\" y1=\"0\" x2=\"%s\" y2=\"%s\" stroke=\"%s\" stroke-width=\"3\"/>"
+                .formatted(fmt(cx), fmt(cx), fmt(h), lineFill);
+        return svg(w, h, line + disc(theme, nodeFillRole, number, cx, h / 2, TIMELINE_NODE / 2));
     }
 
     /** A filled circle with a centered bold two-digit number, contrast-picked against its own fill. */

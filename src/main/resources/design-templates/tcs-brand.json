@@ -32,6 +32,8 @@
       "InfographicBody": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "background", "lineHeightPt": 12 },
       "InfographicCardLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 11, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 14 },
       "InfographicCardBody": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
+      "InfographicTimelineLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 11, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 14 },
+      "InfographicTimelineBody": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
       "KpiLabel": { "fontFamily": "Houschka Rounded", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12, "align": "center" },
       "EventItem": { "fontFamily": "Houschka Rounded", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }
     }
