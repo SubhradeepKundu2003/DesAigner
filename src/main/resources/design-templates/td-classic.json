@@ -21,6 +21,8 @@
       "Body": { "fontFamily": "SansSerif", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 },
       "InfographicLabel": { "fontFamily": "SansSerif", "fontSizePt": 11, "fontWeight": "bold", "colorRole": "background", "lineHeightPt": 14 },
       "InfographicBody": { "fontFamily": "SansSerif", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "background", "lineHeightPt": 12 },
+      "InfographicCardLabel": { "fontFamily": "SansSerif", "fontSizePt": 11, "fontWeight": "bold", "colorRole": "text", "lineHeightPt": 14 },
+      "InfographicCardBody": { "fontFamily": "SansSerif", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
       "Stat": { "fontFamily": "SansSerif", "fontSizePt": 32, "fontWeight": "bold", "colorRole": "primary", "lineHeightPt": 36 },
       "StatLabel": { "fontFamily": "SansSerif", "fontSizePt": 9, "fontWeight": "normal", "colorRole": "muted", "lineHeightPt": 12 },
       "EventItem": { "fontFamily": "SansSerif", "fontSizePt": 10, "fontWeight": "normal", "colorRole": "text", "lineHeightPt": 14 }

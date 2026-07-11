@@ -47,6 +47,28 @@ class InfographicPainterTest {
     }
 
     @Test
+    void chevronBarRowCarriesAPointedRightEdgeInsteadOfARoundedOne() throws Exception {
+        String rounded = InfographicPainter.numberedBars(THEME, "primary", "text", 1, 500, 48);
+        String chevron = InfographicPainter.chevronBars(THEME, "primary", "text", 1, 500, 48);
+        assertTrue(rounded.contains("<rect"), "numberedBars bar is a rounded rect");
+        assertTrue(chevron.contains("<polygon"), "chevronBars bar is a pointed polygon, not a rect");
+        assertTrue(chevron.contains("#4E84C4"), "bar carries the resolved primary color");
+        assertTrue(chevron.contains(">01<"), "numbered disc still present");
+        BufferedImage image = rasterize(chevron);
+        assertEquals(500, image.getWidth());
+    }
+
+    @Test
+    void pointCardCarriesAShadowedCardAndACornerBadge() throws Exception {
+        String svg = InfographicPainter.pointCard(THEME, "surface", "primary", 4, 240, 140);
+        assertTrue(svg.contains("feGaussianBlur"), "card must carry the shadow filter");
+        assertTrue(svg.contains("#EBEBEB"), "card carries the resolved surface fill");
+        assertTrue(svg.contains("<circle") && svg.contains(">04<"), "corner badge with the item number");
+        BufferedImage image = rasterize(svg);
+        assertEquals(240, image.getWidth());
+    }
+
+    @Test
     void encodePaintRoundTripSurvivesTheAssetId() throws Exception {
         String params = InfographicPainter.encode(
                 new InfographicSpec.Shape("numberedBars", "primary", "text"), 2);
@@ -60,6 +82,12 @@ class InfographicPainterTest {
     void unknownKindPaintsNothingInsteadOfThrowing() {
         assertNull(InfographicPainter.paint("noSuchKind.primary.text.1", THEME, 100, 40),
                 "unknown kinds must degrade to the renderers' placeholder path");
+    }
+
+    @Test
+    void allThreeKindsDispatchThroughPaint() throws Exception {
+        rasterize(InfographicPainter.paint("chevronBars.primary.secondary.1", THEME, 480, 40));
+        rasterize(InfographicPainter.paint("pointCard.surface.primary.2", THEME, 240, 140));
     }
 
     private static BufferedImage rasterize(String svg) throws Exception {

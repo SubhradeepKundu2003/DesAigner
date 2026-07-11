@@ -36,6 +36,24 @@ class InfographicCatalogTest {
     void everyLoadedSpecIsListed() {
         assertFalse(CATALOG.all().isEmpty(), "the library ships at least one design");
         assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("numbered-bars")));
+        assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("card-grid")));
+        assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("kpi-bars")));
+    }
+
+    @Test
+    void loadsTheCardGridSpec() {
+        InfographicSpec spec = CATALOG.get("card-grid");
+        assertEquals(InfographicSpec.Archetype.CARD_GRID, spec.archetype());
+        assertEquals("pointCard", spec.shape().kind());
+        assertEquals(6, spec.maxItems());
+    }
+
+    @Test
+    void loadsTheKpiBarsSpecWantingNumbers() {
+        InfographicSpec spec = CATALOG.get("kpi-bars");
+        assertEquals(InfographicSpec.Archetype.KPI_BARS, spec.archetype());
+        assertTrue(spec.wantsNumbers(), "KPI_BARS must require every point to carry a figure");
+        assertEquals("chevronBars", spec.shape().kind());
     }
 
     @Test

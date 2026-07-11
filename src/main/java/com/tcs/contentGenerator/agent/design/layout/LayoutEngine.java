@@ -91,13 +91,24 @@ public class LayoutEngine {
     private static final String COVER_TITLE_STYLE = "CoverTitle";
     private static final String COVER_TITLE_ACCENT_STYLE = "CoverTitleAccent";
     private static final String COVER_SUBTITLE_STYLE = "CoverSubtitle";
-    /** Infographic point styles — fall back to Headline/Body when a theme lacks them. */
+    /**
+     * Infographic point styles — fall back to Headline/Body when a theme lacks
+     * them. Bar-shaped rows (numberedBars/chevronBars) sit on a saturated
+     * {@code primary}-role fill, so their style is light text; card-shaped
+     * grids sit on the light {@code surface} fill, so they need their own
+     * dark-text pair rather than reusing the row styles (a fixed white on a
+     * light card would be unreadable).
+     */
     private static final String INFOGRAPHIC_LABEL_STYLE = "InfographicLabel";
     private static final String INFOGRAPHIC_TEXT_STYLE = "InfographicBody";
+    private static final String INFOGRAPHIC_CARD_LABEL_STYLE = "InfographicCardLabel";
+    private static final String INFOGRAPHIC_CARD_TEXT_STYLE = "InfographicCardBody";
     /** Vertical gap between an infographic point's label and its one-liner. */
     private static final double INFO_LABEL_TEXT_GAP = 2;
     /** Vertical gap between infographic rows. */
     private static final double INFO_ROW_GAP = 10;
+    /** Shape kinds {@link #layoutBarRows} knows how to paint (disc + bar). */
+    private static final java.util.Set<String> KNOWN_ROW_KINDS = java.util.Set.of("numberedBars", "chevronBars");
 
     private final TextMeasurer measurer = new TextMeasurer();
 
@@ -678,20 +689,30 @@ public class LayoutEngine {
                 article.headline(), link, p.contentWidth());
         p.advance(PARAGRAPH_GAP);
 
-        boolean drawShapes = "numberedBars".equals(section.infographic().shape().kind());
-        layoutNumberedBars(p, section, theme, link, drawShapes);
+        if ("pointCard".equals(section.infographic().shape().kind())) {
+            layoutCardGrid(p, section, theme, link);
+        } else {
+            // numberedBars/chevronBars share this row geometry — only the SVG
+            // differs, resolved by InfographicPainter.paint from the shape kind
+            // encoded in the asset id. An unknown kind still lays out the text
+            // rows, just without the painted shape (a broken spec loses only
+            // its graphic, never the content).
+            boolean drawShapes = KNOWN_ROW_KINDS.contains(section.infographic().shape().kind());
+            layoutBarRows(p, section, theme, link, drawShapes);
+        }
         p.advance(PARAGRAPH_GAP);
 
         placeArticleBody(p, article.body(), link, p.contentWidth(), theme);
     }
 
     /**
-     * The NUMBERED_LIST rows: each point is a full-width rounded bar (painted
-     * by {@code InfographicPainter.numberedBars}) carrying its label and
-     * one-liner as text boxes, with a numbered disc on the left. Rows reserve
-     * individually so a long list paginates between rows, never through one.
+     * The NUMBERED_LIST/KPI_BARS row shape: each point is a full-width bar
+     * (painted by {@code InfographicPainter.numberedBars}/{@code chevronBars})
+     * carrying its label and one-liner as text boxes, with a numbered disc on
+     * the left. Rows reserve individually so a long list paginates between
+     * rows, never through one.
      */
-    private void layoutNumberedBars(Paginator p, SectionComposition section, Theme theme,
+    private void layoutBarRows(Paginator p, SectionComposition section, Theme theme,
             SourceLink link, boolean drawShapes) {
         String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_LABEL_STYLE)
                 ? INFOGRAPHIC_LABEL_STYLE : "Headline";
@@ -735,6 +756,81 @@ public class LayoutEngine {
             if (i < points.size() - 1) {
                 p.advance(INFO_ROW_GAP);
             }
+        }
+    }
+
+    /**
+     * The CARD_GRID shape: two rounded cards per row (painted by
+     * {@code InfographicPainter.pointCard}, each with its own numbered
+     * badge), an odd trailing point gets a full-width card. Rows reserve at
+     * uniform height (the taller cell of the pair wins), matching
+     * {@code layoutStandardAsCards}' card-grid convention.
+     */
+    private void layoutCardGrid(Paginator p, SectionComposition section, Theme theme, SourceLink link) {
+        String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_CARD_LABEL_STYLE)
+                ? INFOGRAPHIC_CARD_LABEL_STYLE : "Headline";
+        String textRef = theme.textStyles().containsKey(INFOGRAPHIC_CARD_TEXT_STYLE)
+                ? INFOGRAPHIC_CARD_TEXT_STYLE : "Body";
+        TextStyle labelStyle = styleOf(theme, labelRef);
+        TextStyle textStyle = styleOf(theme, textRef);
+        List<GeneratedArticle.Point> points = section.points();
+        double gutter = theme.spacing().gutterPt();
+        double badgeBlock = InfographicPainter.CARD_BADGE + INFO_LABEL_TEXT_GAP;
+
+        for (int i = 0; i < points.size(); i += 2) {
+            boolean pair = i + 1 < points.size();
+            double cardWidth = pair ? (p.contentWidth() - gutter) / 2 : p.contentWidth();
+            double innerWidth = cardWidth - 2 * InfographicPainter.CARD_PADDING;
+
+            double leftContent = badgeBlock + cardPointHeight(points.get(i), labelStyle, textStyle, innerWidth);
+            double rowContent = leftContent;
+            if (pair) {
+                rowContent = Math.max(rowContent,
+                        badgeBlock + cardPointHeight(points.get(i + 1), labelStyle, textStyle, innerWidth));
+            }
+            double cardHeight = p.reserve(rowContent + 2 * InfographicPainter.CARD_PADDING,
+                    "infographic-card-row:" + points.get(i).label());
+            double y = p.y();
+            placeCardPoint(p, points.get(i), i + 1, section, theme, labelRef, labelStyle, textRef, textStyle,
+                    p.x(), y, cardWidth, cardHeight, link);
+            if (pair) {
+                placeCardPoint(p, points.get(i + 1), i + 2, section, theme, labelRef, labelStyle, textRef,
+                        textStyle, p.x() + cardWidth + gutter, y, cardWidth, cardHeight, link);
+            }
+            p.advance(cardHeight);
+            if (i + 2 < points.size()) {
+                p.advance(ITEM_GAP);
+            }
+        }
+    }
+
+    private double cardPointHeight(GeneratedArticle.Point point, TextStyle labelStyle, TextStyle textStyle,
+            double innerWidth) {
+        double labelHeight = measurer.heightOf(point.label(), labelStyle, innerWidth);
+        if (point.text().isBlank()) {
+            return labelHeight;
+        }
+        return labelHeight + INFO_LABEL_TEXT_GAP + measurer.heightOf(point.text(), textStyle, innerWidth);
+    }
+
+    private void placeCardPoint(Paginator p, GeneratedArticle.Point point, int number, SectionComposition section,
+            Theme theme, String labelRef, TextStyle labelStyle, String textRef, TextStyle textStyle,
+            double x, double y, double width, double height, SourceLink link) {
+        String id = p.nextId();
+        p.add(new ImageBox(id, ComponentRole.DECORATION, new Frame(x, y, width, height),
+                0, true, null,
+                DECOR_ASSET_PREFIX + "infographic-"
+                        + InfographicPainter.encode(section.infographic().shape(), number) + "-" + id,
+                "infographic card"));
+        double innerWidth = width - 2 * InfographicPainter.CARD_PADDING;
+        double textY = y + InfographicPainter.CARD_PADDING + InfographicPainter.CARD_BADGE + INFO_LABEL_TEXT_GAP;
+        double labelHeight = measurer.heightOf(point.label(), labelStyle, innerWidth);
+        addTextAt(p, x + InfographicPainter.CARD_PADDING, textY, innerWidth, labelHeight,
+                ComponentRole.INFOGRAPHIC_LABEL, labelRef, point.label(), link);
+        if (!point.text().isBlank()) {
+            double textHeight = measurer.heightOf(point.text(), textStyle, innerWidth);
+            addTextAt(p, x + InfographicPainter.CARD_PADDING, textY + labelHeight + INFO_LABEL_TEXT_GAP,
+                    innerWidth, textHeight, ComponentRole.INFOGRAPHIC_TEXT, textRef, point.text(), link);
         }
     }
 

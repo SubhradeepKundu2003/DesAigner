@@ -1,0 +1,15 @@
+{
+  "name": "card-grid",
+  "archetype": "CARD_GRID",
+  "minItems": 3,
+  "maxItems": 6,
+  "titleCapacity": 40,
+  "bodyCapacity": 160,
+  "wantsNumbers": false,
+  "background": "ANY",
+  "shape": {
+    "kind": "pointCard",
+    "barFill": "surface",
+    "leadFill": "primary"
+  }
+}

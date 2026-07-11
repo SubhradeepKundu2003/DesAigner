@@ -238,7 +238,8 @@ export-faithful in PPTX/PDF where SVG text support is weakest.
 | **1** | `InfographicSpec` + `InfographicCatalog` + `SectionPattern.INFOGRAPHIC` + `InfographicPainter` + **one archetype end-to-end: `NUMBERED_LIST`** (easiest geometry) | whole chain renders in the iframe HTML + PPTX/PDF | ✅ DONE 2026-07-11 |
 | **2** | Agent #4 structured points (`POINT:` protocol) + parser tests. *(keyMetrics fallback dropped by design: purely numeric content already has `KPI_TILES`, which IS the KPI archetype — auto-deriving points from metrics would have silently rerouted it)* | points exist for real content | ✅ DONE 2026-07-11 |
 | **3** | Selection engine: filters, intent table, seeded randomness, variety constraint, fallback chain | "wise" selection on varied inputs | ✅ DONE 2026-07-11 |
-| **4** | Remaining archetypes by geometry difficulty: `CARD_GRID` → `KPI_BARS` → `TIMELINE` (S-curve, zigzag) → `CYCLE` (donut, fan) → `HUB_SPOKE` → `SPLIT_VISUAL`; 2–3 concrete specs each ≈ 15–20 designs | full library | next |
+| **4a** | `CARD_GRID` (`pointCard` painter: shadowed card + corner badge, 2-col grid, odd trailing card full-width) + `KPI_BARS` (`chevronBars` painter: same disc-and-bar row as numbered-bars but the bar's right edge is an arrow point, not rounded) | two more archetypes live, disc/badge painting shared via a common helper | ✅ DONE 2026-07-11 |
+| **4b** | Remaining: `TIMELINE` (S-curve, zigzag) → `CYCLE` (donut, fan) → `HUB_SPOKE` → `SPLIT_VISUAL`; 2–3 concrete specs each ≈ 15–20 designs | full library | next |
 | **5** | Fit-check retry loop + `LayoutLint` rule + per-point icon matching *(char-capacity filter shipped in Phase 3; measurement retry pending)* | quality floor | partial |
 
 Each phase leaves the pipeline green: until Phase 3 wires selection in, no

@@ -754,4 +754,92 @@ class LayoutEngineTest {
         assertTrue(body.frame().y() >= lastRow.y() + lastRow.h() - EPSILON,
                 "the article body renders below the infographic");
     }
+
+    private static com.tcs.contentGenerator.agent.design.infographic.InfographicSpec infographicSpec(
+            String name, com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype archetype,
+            String kind) {
+        return new com.tcs.contentGenerator.agent.design.infographic.InfographicSpec(
+                name, archetype, 3, 6, 60, 220, archetype
+                == com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.KPI_BARS,
+                com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Background.ANY,
+                new com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Shape(
+                        kind, "primary", "secondary"));
+    }
+
+    @Test
+    void kpiBarsInfographicUsesTheChevronRowShape() {
+        DesignTemplate base = fixtureTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        var spec = infographicSpec("kpi-bars",
+                com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.KPI_BARS,
+                "chevronBars");
+        List<GeneratedArticle.Point> points = List.of(
+                new GeneratedArticle.Point("NPS 72", "up from 68 last quarter"),
+                new GeneratedArticle.Point("Growth 18%", "quarter on quarter"),
+                new GeneratedArticle.Point("CSAT 4.6/5", "customer satisfaction"));
+        GeneratedArticle article = new GeneratedArticle("Delivery headline",
+                "A short delivery body with a couple of sentences.", null, points);
+        SectionComposition section = new SectionComposition(NewsletterSection.DELIVERY_HIGHLIGHTS,
+                SectionPattern.INFOGRAPHIC, List.of(article), "primary", null, null, null,
+                List.of(), spec, points);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<ImageBox> rows = document.pages().stream().flatMap(p -> p.components().stream())
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        assertTrue(rows.size() == 3, "one chevron row per point, got " + rows.size());
+        for (int i = 0; i < rows.size(); i++) {
+            assertTrue(rows.get(i).assetId().contains("chevronBars.primary.secondary." + (i + 1)),
+                    "row " + i + " must encode the chevron shape kind: " + rows.get(i).assetId());
+        }
+    }
+
+    @Test
+    void cardGridInfographicPairsPointsIntoEqualHeightRows() {
+        DesignTemplate base = fixtureTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        var spec = infographicSpec("card-grid",
+                com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.CARD_GRID,
+                "pointCard");
+        List<GeneratedArticle.Point> points = List.of(
+                new GeneratedArticle.Point("Speed", "Ship faster than ever."),
+                new GeneratedArticle.Point("Quality", "Fewer defects reach production."),
+                new GeneratedArticle.Point("Scale", "Handles ten times the load."));
+        GeneratedArticle article = new GeneratedArticle("Pillars headline",
+                "A short pillars body.", null, points);
+        SectionComposition section = new SectionComposition(NewsletterSection.INNOVATION_SPOTLIGHT,
+                SectionPattern.INFOGRAPHIC, List.of(article), "primary", null, null, null,
+                List.of(), spec, points);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> cards = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        assertTrue(cards.size() == 3, "one card per point, got " + cards.size());
+        // first pair (2 cards) shares a row: same top + uniform height; the odd
+        // third point gets a full-width card on the next row
+        assertTrue(Math.abs(cards.get(0).frame().y() - cards.get(1).frame().y()) < EPSILON,
+                "the first pair shares a row top");
+        assertTrue(Math.abs(cards.get(0).frame().h() - cards.get(1).frame().h()) < EPSILON,
+                "the first pair shares a uniform height");
+        assertTrue(cards.get(1).frame().x() > cards.get(0).frame().x(), "pair is laid left to right");
+        assertTrue(Math.abs(cards.get(2).frame().w() - tallPage.theme().pageSize().widthPt()
+                        + 2 * MARGIN) < EPSILON,
+                "the odd trailing card takes the full content width");
+        assertTrue(cards.get(2).frame().y() > cards.get(0).frame().y() + EPSILON,
+                "the trailing card starts a new row below the pair");
+        assertTrue(all.stream().filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).count() == 3,
+                "each card carries its point's label as real text");
+    }
 }

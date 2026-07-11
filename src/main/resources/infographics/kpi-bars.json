@@ -1,0 +1,15 @@
+{
+  "name": "kpi-bars",
+  "archetype": "KPI_BARS",
+  "minItems": 3,
+  "maxItems": 4,
+  "titleCapacity": 40,
+  "bodyCapacity": 140,
+  "wantsNumbers": true,
+  "background": "ANY",
+  "shape": {
+    "kind": "chevronBars",
+    "barFill": "primary",
+    "leadFill": "secondary"
+  }
+}
