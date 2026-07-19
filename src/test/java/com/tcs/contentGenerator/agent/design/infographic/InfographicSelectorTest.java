@@ -117,6 +117,40 @@ class InfographicSelectorTest {
         }
     }
 
+    @Test
+    void centralThemeWordsAdmitHubSpoke() {
+        InfographicSpec hubSpoke = new InfographicSpec(
+                "hub-spoke", InfographicSpec.Archetype.HUB_SPOKE, 3, 6, 60, 220,
+                false, InfographicSpec.Background.ANY,
+                new InfographicSpec.Shape("hubWheel", "primary", "secondary"));
+        InfographicSelector selector = new InfographicSelector(List.of(hubSpoke), "job-1", false);
+        List<Point> central = List.of(
+                new Point("Data core", "The central platform every team builds on."),
+                new Point("Delivery", "Feeds off the core."),
+                new Point("Insights", "Feeds off the core."));
+        assertEquals("hub-spoke", selector.select(
+                NewsletterSection.PROJECT_UPDATES, central).orElseThrow().name(),
+                "a central-theme word in a label admits HUB_SPOKE");
+        InfographicSelector noSignal = new InfographicSelector(List.of(hubSpoke), "job-1", false);
+        assertTrue(noSignal.select(NewsletterSection.PROJECT_UPDATES, genericPoints(3)).isEmpty(),
+                "HUB_SPOKE stays signal-gated — plain points don't earn it");
+    }
+
+    @Test
+    void splitVisualIsAlwaysAdmittedAsAGeneralistWithinItsItemRange() {
+        InfographicSpec splitVisual = new InfographicSpec(
+                "split-visual", InfographicSpec.Archetype.SPLIT_VISUAL, 3, 4, 30, 90,
+                false, InfographicSpec.Background.ANY,
+                new InfographicSpec.Shape("splitCard", "surface", "primary"));
+        InfographicSelector selector = new InfographicSelector(List.of(splitVisual), "job-1", false);
+        assertEquals("split-visual", selector.select(
+                NewsletterSection.PROJECT_UPDATES, genericPoints(4)).orElseThrow().name(),
+                "SPLIT_VISUAL needs no keyword signal — its own item-count range is the filter");
+        InfographicSelector tooMany = new InfographicSelector(List.of(splitVisual), "job-1", false);
+        assertTrue(tooMany.select(NewsletterSection.PROJECT_UPDATES, genericPoints(5)).isEmpty(),
+                "five points exceed split-visual's maxItems of 4");
+    }
+
     private static InfographicSpec cardGridVariant(String suffix) {
         return new InfographicSpec("cards-" + suffix, InfographicSpec.Archetype.CARD_GRID, 3, 6,
                 60, 220, false, InfographicSpec.Background.ANY,

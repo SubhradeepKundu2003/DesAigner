@@ -886,4 +886,147 @@ class LayoutEngineTest {
         assertTrue(labels.get(1).frame().x() > contentMidX, "point 2 sits right of the connector");
         assertTrue(labels.get(2).frame().x() < contentMidX, "point 3 sits left of the connector again");
     }
+
+    @Test
+    void cycleInfographicPlacesOneRingAboveAPerPointSwatchLegend() {
+        DesignTemplate base = fixtureTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        var spec = infographicSpec("cycle",
+                com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.CYCLE,
+                "donutRing");
+        List<GeneratedArticle.Point> points = List.of(
+                new GeneratedArticle.Point("Plan", "Define the quarter's goals."),
+                new GeneratedArticle.Point("Build", "Execute against the plan."),
+                new GeneratedArticle.Point("Review", "Check outcomes against goals."),
+                new GeneratedArticle.Point("Improve", "Feed learnings into the next cycle."));
+        GeneratedArticle article = new GeneratedArticle("Continuous improvement headline",
+                "A short cycle body.", null, points);
+        SectionComposition section = new SectionComposition(NewsletterSection.INNOVATION_SPOTLIGHT,
+                SectionPattern.INFOGRAPHIC, List.of(article), "primary", null, null, null,
+                List.of(), spec, points);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> boxes = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        List<ImageBox> ring = boxes.stream().filter(b -> b.assetId().contains("donutRing")).toList();
+        List<ImageBox> swatches = boxes.stream().filter(b -> b.assetId().contains("cycleSwatch")).toList();
+        assertTrue(ring.size() == 1, "exactly one ring image for the whole point set, got " + ring.size());
+        assertTrue(ring.get(0).assetId().contains("donutRing.primary.secondary.4"),
+                "ring encodes the item count, not a 1-based index: " + ring.get(0).assetId());
+        assertTrue(swatches.size() == 4, "one legend swatch per point, got " + swatches.size());
+        for (int i = 0; i < swatches.size(); i++) {
+            assertTrue(swatches.get(i).assetId().contains("cycleSwatch.primary.secondary." + (i + 1)),
+                    "swatch " + i + " must encode its 1-based point number: " + swatches.get(i).assetId());
+        }
+        assertTrue(swatches.get(0).frame().y() > ring.get(0).frame().y() + ring.get(0).frame().h() - EPSILON,
+                "legend rows start below the ring");
+        List<Component> labels = all.stream().filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).toList();
+        assertTrue(labels.size() == 4, "each point carries its label as real text");
+    }
+
+    @Test
+    void hubSpokeInfographicPlacesOneWheelAboveAPerPointSwatchLegend() {
+        DesignTemplate base = fixtureTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        var spec = infographicSpec("hub-spoke",
+                com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.HUB_SPOKE,
+                "hubWheel");
+        List<GeneratedArticle.Point> points = List.of(
+                new GeneratedArticle.Point("Delivery", "Feeds off the shared core."),
+                new GeneratedArticle.Point("Insights", "Feeds off the shared core."),
+                new GeneratedArticle.Point("Support", "Feeds off the shared core."),
+                new GeneratedArticle.Point("Platform", "The team that owns the core."));
+        GeneratedArticle article = new GeneratedArticle("Data core headline",
+                "A short hub-and-spoke body.", null, points);
+        SectionComposition section = new SectionComposition(NewsletterSection.INNOVATION_SPOTLIGHT,
+                SectionPattern.INFOGRAPHIC, List.of(article), "primary", null, null, null,
+                List.of(), spec, points);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> boxes = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        List<ImageBox> wheel = boxes.stream().filter(b -> b.assetId().contains("hubWheel")).toList();
+        List<ImageBox> swatches = boxes.stream().filter(b -> b.assetId().contains("hubSwatch")).toList();
+        assertTrue(wheel.size() == 1, "exactly one wheel image for the whole point set, got " + wheel.size());
+        assertTrue(wheel.get(0).assetId().contains("hubWheel.primary.secondary.4"),
+                "wheel encodes the item count, not a 1-based index: " + wheel.get(0).assetId());
+        assertTrue(swatches.size() == 4, "one legend swatch per point, got " + swatches.size());
+        for (int i = 0; i < swatches.size(); i++) {
+            assertTrue(swatches.get(i).assetId().contains("hubSwatch.primary.secondary." + (i + 1)),
+                    "swatch " + i + " must encode its 1-based point number: " + swatches.get(i).assetId());
+        }
+        assertTrue(swatches.get(0).frame().y() > wheel.get(0).frame().y() + wheel.get(0).frame().h() - EPSILON,
+                "legend rows start below the wheel");
+        List<Component> labels = all.stream().filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).toList();
+        assertTrue(labels.size() == 4, "each point carries its label as real text");
+    }
+
+    @Test
+    void splitVisualInfographicPlacesProseLeftAndStackedCardsRight() {
+        DesignTemplate base = fixtureTemplate();
+        DesignTemplate tallPage = new DesignTemplate(base.name(),
+                new Theme(new PageSize(PAGE_WIDTH, 800), base.theme().colors(),
+                        base.theme().textStyles(), base.theme().spacing()),
+                base.decor());
+        var spec = new com.tcs.contentGenerator.agent.design.infographic.InfographicSpec(
+                "split-visual", com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Archetype.SPLIT_VISUAL,
+                3, 4, 30, 90, false,
+                com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Background.ANY,
+                new com.tcs.contentGenerator.agent.design.infographic.InfographicSpec.Shape(
+                        "splitCard", "surface", "primary"));
+        List<GeneratedArticle.Point> points = List.of(
+                new GeneratedArticle.Point("Faster", "Ships in half the time."),
+                new GeneratedArticle.Point("Safer", "Fewer defects in prod."),
+                new GeneratedArticle.Point("Cheaper", "Lower run cost."));
+        GeneratedArticle article = new GeneratedArticle("Why it matters",
+                "A longer piece of prose explaining the initiative in more detail than a card could hold.",
+                null, points);
+        SectionComposition section = new SectionComposition(NewsletterSection.INNOVATION_SPOTLIGHT,
+                SectionPattern.INFOGRAPHIC, List.of(article), "primary", null, null, null,
+                List.of(), spec, points);
+        DesignDocument document = new LayoutEngine().layout(
+                new CompositionPlan("test", List.of(section)), tallPage, "Test Issue", "job-1");
+
+        List<Component> all = document.pages().stream().flatMap(p -> p.components().stream()).toList();
+        List<ImageBox> cards = all.stream()
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-")
+                        && b.assetId().contains("splitCard"))
+                .toList();
+        assertTrue(cards.size() == 3, "one card per point, got " + cards.size());
+        for (int i = 0; i < cards.size(); i++) {
+            assertTrue(cards.get(i).assetId().contains("splitCard.surface.primary." + (i + 1)),
+                    "card " + i + " must encode its 1-based point number: " + cards.get(i).assetId());
+            if (i > 0) {
+                assertTrue(cards.get(i).frame().y() > cards.get(i - 1).frame().y() + EPSILON,
+                        "cards stack downward in a single column");
+                assertTrue(Math.abs(cards.get(i).frame().x() - cards.get(0).frame().x()) < EPSILON,
+                        "cards share the same right-column x");
+            }
+        }
+        Component headline = all.stream().filter(c -> c.role() == ComponentRole.ARTICLE_HEADLINE)
+                .findFirst().orElseThrow();
+        Component body = all.stream().filter(c -> c.role() == ComponentRole.ARTICLE_BODY)
+                .findFirst().orElseThrow();
+        assertTrue(headline.frame().x() < cards.get(0).frame().x(), "prose column sits left of the cards");
+        assertTrue(body.frame().x() < cards.get(0).frame().x(), "body prose sits left of the cards too");
+        assertTrue(Math.abs(headline.frame().y() - cards.get(0).frame().y()) < EPSILON,
+                "the prose column and the card column start level");
+        List<Component> labels = all.stream().filter(c -> c.role() == ComponentRole.INFOGRAPHIC_LABEL).toList();
+        assertTrue(labels.size() == 3, "each card carries its point's label as real text");
+    }
 }

@@ -104,12 +104,13 @@ public class LayoutEngine {
     private static final String INFOGRAPHIC_CARD_LABEL_STYLE = "InfographicCardLabel";
     private static final String INFOGRAPHIC_CARD_TEXT_STYLE = "InfographicCardBody";
     /**
-     * TIMELINE's text sits beside the connector line, on the plain page
-     * background — not on a saturated fill like the bar rows — so it needs
-     * its own dark-text pair, same reasoning as the card styles above.
+     * Shared by any archetype whose per-point text sits on the plain page
+     * background rather than a saturated fill — TIMELINE (beside the
+     * connector line) and CYCLE (beside its legend swatch) both use this
+     * dark-text pair, same reasoning as the card styles above.
      */
-    private static final String INFOGRAPHIC_TIMELINE_LABEL_STYLE = "InfographicTimelineLabel";
-    private static final String INFOGRAPHIC_TIMELINE_TEXT_STYLE = "InfographicTimelineBody";
+    private static final String INFOGRAPHIC_PLAIN_LABEL_STYLE = "InfographicPlainLabel";
+    private static final String INFOGRAPHIC_PLAIN_TEXT_STYLE = "InfographicPlainBody";
     /** Vertical gap between an infographic point's label and its one-liner. */
     private static final double INFO_LABEL_TEXT_GAP = 2;
     /** Vertical gap between infographic rows. */
@@ -692,6 +693,13 @@ public class LayoutEngine {
         GeneratedArticle article = section.articles().get(0);
         SourceLink link = new SourceLink(section.section().title(), article.headline());
 
+        if ("splitCard".equals(section.infographic().shape().kind())) {
+            // SPLIT_VISUAL's headline+body live in its own left column, not
+            // full width above the shape like every other archetype here
+            layoutSplitVisual(p, section, theme, article, link);
+            return;
+        }
+
         placeText(p, ComponentRole.ARTICLE_HEADLINE, "Headline", styleOf(theme, "Headline"),
                 article.headline(), link, p.contentWidth());
         p.advance(PARAGRAPH_GAP);
@@ -700,6 +708,10 @@ public class LayoutEngine {
             layoutCardGrid(p, section, theme, link);
         } else if ("timelineNode".equals(section.infographic().shape().kind())) {
             layoutTimeline(p, section, theme, link);
+        } else if ("donutRing".equals(section.infographic().shape().kind())) {
+            layoutCycle(p, section, theme, link);
+        } else if ("hubWheel".equals(section.infographic().shape().kind())) {
+            layoutHubSpoke(p, section, theme, link);
         } else {
             // numberedBars/chevronBars share this row geometry — only the SVG
             // differs, resolved by InfographicPainter.paint from the shape kind
@@ -851,10 +863,10 @@ public class LayoutEngine {
      * reference look. Rows reserve individually like {@link #layoutBarRows}.
      */
     private void layoutTimeline(Paginator p, SectionComposition section, Theme theme, SourceLink link) {
-        String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_TIMELINE_LABEL_STYLE)
-                ? INFOGRAPHIC_TIMELINE_LABEL_STYLE : "Headline";
-        String textRef = theme.textStyles().containsKey(INFOGRAPHIC_TIMELINE_TEXT_STYLE)
-                ? INFOGRAPHIC_TIMELINE_TEXT_STYLE : "Body";
+        String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_PLAIN_LABEL_STYLE)
+                ? INFOGRAPHIC_PLAIN_LABEL_STYLE : "Headline";
+        String textRef = theme.textStyles().containsKey(INFOGRAPHIC_PLAIN_TEXT_STYLE)
+                ? INFOGRAPHIC_PLAIN_TEXT_STYLE : "Body";
         TextStyle labelStyle = styleOf(theme, labelRef);
         TextStyle textStyle = styleOf(theme, textRef);
         List<GeneratedArticle.Point> points = section.points();
@@ -892,6 +904,199 @@ public class LayoutEngine {
                 p.advance(INFO_ROW_GAP);
             }
         }
+    }
+
+    /**
+     * The CYCLE shape: a donut ring (painted once by {@code InfographicPainter
+     * .donutRing}, one wedge per point) centered above a legend — each row
+     * carries a small colored swatch ({@code InfographicPainter.cycleSwatch},
+     * alternating the same two fill roles as its wedge, by point index) plus
+     * the label/one-liner, using the same plain-background text styles
+     * TIMELINE's legend uses (the swatch sits on the page background, not a
+     * saturated fill). The ring's asset id encodes {@code points.size()} as
+     * its "number" (it draws the whole set at once, not a single item), while
+     * each legend row builds its own {@code cycleSwatch} id directly — the
+     * spec's shape always names {@code donutRing}, so the per-row swatch kind
+     * can't come from {@link InfographicPainter#encode}.
+     */
+    private void layoutCycle(Paginator p, SectionComposition section, Theme theme, SourceLink link) {
+        var shape = section.infographic().shape();
+        List<GeneratedArticle.Point> points = section.points();
+
+        double ringSize = Math.min(p.contentWidth() * 0.45, 170);
+        double ringHeight = p.reserve(ringSize, "infographic-ring");
+        double ringX = p.x() + (p.contentWidth() - ringSize) / 2;
+        String ringId = p.nextId();
+        p.add(new ImageBox(ringId, ComponentRole.DECORATION,
+                new Frame(ringX, p.y(), ringSize, ringHeight), 0, true, null,
+                DECOR_ASSET_PREFIX + "infographic-"
+                        + InfographicPainter.encode(shape, points.size()) + "-" + ringId,
+                "infographic cycle ring"));
+        p.advance(ringHeight);
+        p.advance(PARAGRAPH_GAP);
+
+        String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_PLAIN_LABEL_STYLE)
+                ? INFOGRAPHIC_PLAIN_LABEL_STYLE : "Headline";
+        String textRef = theme.textStyles().containsKey(INFOGRAPHIC_PLAIN_TEXT_STYLE)
+                ? INFOGRAPHIC_PLAIN_TEXT_STYLE : "Body";
+        TextStyle labelStyle = styleOf(theme, labelRef);
+        TextStyle textStyle = styleOf(theme, textRef);
+        double textX = p.x() + InfographicPainter.DISC + InfographicPainter.DISC_GAP;
+        double textWidth = p.contentWidth() - InfographicPainter.DISC - InfographicPainter.DISC_GAP;
+
+        for (int i = 0; i < points.size(); i++) {
+            GeneratedArticle.Point point = points.get(i);
+            double labelHeight = measurer.heightOf(point.label(), labelStyle, textWidth);
+            double textHeight = point.text().isBlank() ? 0
+                    : measurer.heightOf(point.text(), textStyle, textWidth);
+            double content = labelHeight + (textHeight > 0 ? INFO_LABEL_TEXT_GAP + textHeight : 0);
+            double rowHeight = Math.max(content, InfographicPainter.DISC + 4);
+            double h = p.reserve(rowHeight, "infographic-cycle:" + point.label());
+            double y = p.y();
+            String id = p.nextId();
+            p.add(new ImageBox(id, ComponentRole.DECORATION,
+                    new Frame(p.x(), y, p.contentWidth(), h), 0, true, null,
+                    DECOR_ASSET_PREFIX + "infographic-cycleSwatch." + shape.barFill() + "."
+                            + shape.leadFill() + "." + (i + 1) + "-" + id,
+                    "infographic cycle legend"));
+            double contentTop = y + Math.max(0, (h - content) / 2);
+            addTextAt(p, textX, contentTop, textWidth, labelHeight,
+                    ComponentRole.INFOGRAPHIC_LABEL, labelRef, point.label(), link);
+            if (textHeight > 0) {
+                addTextAt(p, textX, contentTop + labelHeight + INFO_LABEL_TEXT_GAP, textWidth,
+                        textHeight, ComponentRole.INFOGRAPHIC_TEXT, textRef, point.text(), link);
+            }
+            p.advance(h);
+            if (i < points.size() - 1) {
+                p.advance(INFO_ROW_GAP);
+            }
+        }
+    }
+
+    /**
+     * The HUB_SPOKE shape: a wheel (painted once by {@code InfographicPainter
+     * .hubWheel}, hub-plus-spokes-plus-satellites for the whole point set)
+     * centered above a legend, the same "ring/wheel above, swatch legend
+     * below" composition {@link #layoutCycle} uses — the satellite discs
+     * carry no room for their own label, so identity lives in the {@code
+     * hubSwatch} row below, exactly like {@code cycleSwatch}.
+     */
+    private void layoutHubSpoke(Paginator p, SectionComposition section, Theme theme, SourceLink link) {
+        var shape = section.infographic().shape();
+        List<GeneratedArticle.Point> points = section.points();
+
+        double wheelSize = Math.min(p.contentWidth() * 0.45, 170);
+        double wheelHeight = p.reserve(wheelSize, "infographic-wheel");
+        double wheelX = p.x() + (p.contentWidth() - wheelSize) / 2;
+        String wheelId = p.nextId();
+        p.add(new ImageBox(wheelId, ComponentRole.DECORATION,
+                new Frame(wheelX, p.y(), wheelSize, wheelHeight), 0, true, null,
+                DECOR_ASSET_PREFIX + "infographic-"
+                        + InfographicPainter.encode(shape, points.size()) + "-" + wheelId,
+                "infographic hub wheel"));
+        p.advance(wheelHeight);
+        p.advance(PARAGRAPH_GAP);
+
+        String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_PLAIN_LABEL_STYLE)
+                ? INFOGRAPHIC_PLAIN_LABEL_STYLE : "Headline";
+        String textRef = theme.textStyles().containsKey(INFOGRAPHIC_PLAIN_TEXT_STYLE)
+                ? INFOGRAPHIC_PLAIN_TEXT_STYLE : "Body";
+        TextStyle labelStyle = styleOf(theme, labelRef);
+        TextStyle textStyle = styleOf(theme, textRef);
+        double textX = p.x() + InfographicPainter.DISC + InfographicPainter.DISC_GAP;
+        double textWidth = p.contentWidth() - InfographicPainter.DISC - InfographicPainter.DISC_GAP;
+
+        for (int i = 0; i < points.size(); i++) {
+            GeneratedArticle.Point point = points.get(i);
+            double labelHeight = measurer.heightOf(point.label(), labelStyle, textWidth);
+            double textHeight = point.text().isBlank() ? 0
+                    : measurer.heightOf(point.text(), textStyle, textWidth);
+            double content = labelHeight + (textHeight > 0 ? INFO_LABEL_TEXT_GAP + textHeight : 0);
+            double rowHeight = Math.max(content, InfographicPainter.DISC + 4);
+            double h = p.reserve(rowHeight, "infographic-hub:" + point.label());
+            double y = p.y();
+            String id = p.nextId();
+            p.add(new ImageBox(id, ComponentRole.DECORATION,
+                    new Frame(p.x(), y, p.contentWidth(), h), 0, true, null,
+                    DECOR_ASSET_PREFIX + "infographic-hubSwatch." + shape.barFill() + "."
+                            + shape.leadFill() + "." + (i + 1) + "-" + id,
+                    "infographic hub legend"));
+            double contentTop = y + Math.max(0, (h - content) / 2);
+            addTextAt(p, textX, contentTop, textWidth, labelHeight,
+                    ComponentRole.INFOGRAPHIC_LABEL, labelRef, point.label(), link);
+            if (textHeight > 0) {
+                addTextAt(p, textX, contentTop + labelHeight + INFO_LABEL_TEXT_GAP, textWidth,
+                        textHeight, ComponentRole.INFOGRAPHIC_TEXT, textRef, point.text(), link);
+            }
+            p.advance(h);
+            if (i < points.size() - 1) {
+                p.advance(INFO_ROW_GAP);
+            }
+        }
+    }
+
+    /**
+     * The SPLIT_VISUAL shape: the article's prose (headline + body) in a
+     * left column beside a right column of stacked compact cards (painted
+     * by {@code InfographicPainter.splitCard}, reusing {@link #placeCardPoint}
+     * and {@link #cardPointHeight} — the same badge-and-card cell {@link
+     * #layoutCardGrid} uses, just stacked in one column instead of paired
+     * rows). Unlike every other archetype here, this shape owns the
+     * headline/body placement itself (see {@link #layoutInfographic}) because
+     * the prose is a column, not a band above the shape; the whole block
+     * reserves one height like {@link #layoutTwoColumn} rather than
+     * paginating row by row, since the two columns must start level.
+     */
+    private void layoutSplitVisual(Paginator p, SectionComposition section, Theme theme,
+            GeneratedArticle article, SourceLink link) {
+        List<GeneratedArticle.Point> points = section.points();
+        double gutter = theme.spacing().gutterPt();
+        double rightWidth = p.contentWidth() * 0.38;
+        double leftWidth = p.contentWidth() - gutter - rightWidth;
+
+        TextStyle headStyle = styleOf(theme, "Headline");
+        TextStyle bodyStyle = styleOf(theme, "Body");
+        double headHeight = measurer.heightOf(article.headline(), headStyle, leftWidth);
+        double bodyHeight = measurer.heightOf(article.body(), bodyStyle, leftWidth);
+        double leftHeight = headHeight + PARAGRAPH_GAP + bodyHeight;
+
+        String labelRef = theme.textStyles().containsKey(INFOGRAPHIC_CARD_LABEL_STYLE)
+                ? INFOGRAPHIC_CARD_LABEL_STYLE : "Headline";
+        String textRef = theme.textStyles().containsKey(INFOGRAPHIC_CARD_TEXT_STYLE)
+                ? INFOGRAPHIC_CARD_TEXT_STYLE : "Body";
+        TextStyle labelStyle = styleOf(theme, labelRef);
+        TextStyle textStyle = styleOf(theme, textRef);
+        double innerWidth = rightWidth - 2 * InfographicPainter.CARD_PADDING;
+        double badgeBlock = InfographicPainter.CARD_BADGE + INFO_LABEL_TEXT_GAP;
+
+        double rightHeight = 0;
+        for (int i = 0; i < points.size(); i++) {
+            rightHeight += badgeBlock + cardPointHeight(points.get(i), labelStyle, textStyle, innerWidth)
+                    + 2 * InfographicPainter.CARD_PADDING;
+            if (i < points.size() - 1) {
+                rightHeight += ITEM_GAP;
+            }
+        }
+
+        double h = p.reserve(Math.max(leftHeight, rightHeight),
+                "infographic-split:" + section.section().title());
+        double y = p.y();
+        addTextAt(p, p.x(), y, leftWidth, headHeight,
+                ComponentRole.ARTICLE_HEADLINE, "Headline", article.headline(), link);
+        addTextAt(p, p.x(), y + headHeight + PARAGRAPH_GAP, leftWidth, bodyHeight,
+                ComponentRole.ARTICLE_BODY, "Body", article.body(), link);
+
+        double cardX = p.x() + leftWidth + gutter;
+        double cardY = y;
+        for (int i = 0; i < points.size(); i++) {
+            GeneratedArticle.Point point = points.get(i);
+            double cardHeight = badgeBlock + cardPointHeight(point, labelStyle, textStyle, innerWidth)
+                    + 2 * InfographicPainter.CARD_PADDING;
+            placeCardPoint(p, point, i + 1, section, theme, labelRef, labelStyle, textRef, textStyle,
+                    cardX, cardY, rightWidth, cardHeight, link);
+            cardY += cardHeight + ITEM_GAP;
+        }
+        p.advance(h);
     }
 
     private void layoutTwoColumn(Paginator p, SectionComposition section, Theme theme) {

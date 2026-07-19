@@ -1,0 +1,15 @@
+{
+  "name": "split-visual",
+  "archetype": "SPLIT_VISUAL",
+  "minItems": 3,
+  "maxItems": 4,
+  "titleCapacity": 30,
+  "bodyCapacity": 90,
+  "wantsNumbers": false,
+  "background": "ANY",
+  "shape": {
+    "kind": "splitCard",
+    "barFill": "surface",
+    "leadFill": "primary"
+  }
+}

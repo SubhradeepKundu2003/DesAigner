@@ -60,6 +60,11 @@ public final class InfographicPainter {
             case "chevronBars" -> chevronBars(theme, role1, role2, number, w, h);
             case "pointCard" -> pointCard(theme, role1, role2, number, w, h);
             case "timelineNode" -> timelineNode(theme, role1, role2, number, w, h);
+            case "donutRing" -> donutRing(theme, role1, role2, number, w, h);
+            case "cycleSwatch" -> cycleSwatch(theme, role1, role2, number, w, h);
+            case "hubWheel" -> hubWheel(theme, role1, role2, number, w, h);
+            case "hubSwatch" -> hubSwatch(theme, role1, role2, number, w, h);
+            case "splitCard" -> splitCard(theme, role1, role2, number, w, h);
             default -> null;
         };
     }
@@ -127,6 +132,118 @@ public final class InfographicPainter {
         String line = "<line x1=\"%s\" y1=\"0\" x2=\"%s\" y2=\"%s\" stroke=\"%s\" stroke-width=\"3\"/>"
                 .formatted(fmt(cx), fmt(cx), fmt(h), lineFill);
         return svg(w, h, line + disc(theme, nodeFillRole, number, cx, h / 2, TIMELINE_NODE / 2));
+    }
+
+    /**
+     * The {@code CYCLE} design's ring: {@code itemCount} equal wedges (a thin
+     * gap between them) alternating the two fill roles, drawn once for the
+     * whole point set — unlike the per-point painters above, {@code number}
+     * here means the item <em>count</em>, not a 1-based index. No text is
+     * baked in (the wedges carry no label of their own); each point's
+     * identity lives in the {@link #cycleSwatch} legend row below the ring,
+     * placed by {@code LayoutEngine}, alternating fill the same way.
+     */
+    public static String donutRing(Theme theme, String firstFillRole, String secondFillRole,
+            int itemCount, double w, double h) {
+        double cx = w / 2;
+        double cy = h / 2;
+        double outerR = Math.min(w, h) / 2 * 0.9;
+        double innerR = outerR * 0.55;
+        double gap = 0.03;
+        double step = 2 * Math.PI / itemCount;
+        StringBuilder wedges = new StringBuilder();
+        for (int i = 0; i < itemCount; i++) {
+            double a0 = -Math.PI / 2 + i * step;
+            double a1 = a0 + step - gap;
+            String fill = color(theme, i % 2 == 0 ? firstFillRole : secondFillRole);
+            wedges.append(wedgePath(cx, cy, innerR, outerR, a0, a1)).append(fill).append("\"/>");
+        }
+        return svg(w, h, wedges.toString());
+    }
+
+    private static String wedgePath(double cx, double cy, double innerR, double outerR,
+            double a0, double a1) {
+        double x1 = cx + outerR * Math.cos(a0);
+        double y1 = cy + outerR * Math.sin(a0);
+        double x2 = cx + outerR * Math.cos(a1);
+        double y2 = cy + outerR * Math.sin(a1);
+        double x3 = cx + innerR * Math.cos(a1);
+        double y3 = cy + innerR * Math.sin(a1);
+        double x4 = cx + innerR * Math.cos(a0);
+        double y4 = cy + innerR * Math.sin(a0);
+        return ("<path d=\"M %s,%s A %s,%s 0 0 1 %s,%s L %s,%s A %s,%s 0 0 0 %s,%s Z\" fill=\"")
+                .formatted(fmt(x1), fmt(y1), fmt(outerR), fmt(outerR), fmt(x2), fmt(y2),
+                        fmt(x3), fmt(y3), fmt(innerR), fmt(innerR), fmt(x4), fmt(y4));
+    }
+
+    /**
+     * One legend row's colored swatch for the {@code CYCLE} design — a small
+     * disc (no bar) alternating the same two fill roles as the ring above it,
+     * by point index, so the legend visually maps back onto its wedge.
+     */
+    public static String cycleSwatch(Theme theme, String firstFillRole, String secondFillRole,
+            int number, double w, double h) {
+        String fillRole = (number - 1) % 2 == 0 ? firstFillRole : secondFillRole;
+        return svg(w, h, disc(theme, fillRole, number, DISC / 2, h / 2, DISC / 2));
+    }
+
+    /**
+     * The {@code HUB_SPOKE} design's wheel: a filled hub circle at the
+     * frame's center with a spoke line reaching out to each of
+     * {@code itemCount} satellite positions evenly spaced around it, each
+     * satellite a small numbered disc alternating the two fill roles —
+     * drawn once for the whole point set, the same "one image, {@code
+     * itemCount} not index" convention as {@link #donutRing}. No text is
+     * baked in; each point's identity lives in the {@link #hubSwatch}
+     * legend row below, placed by {@code LayoutEngine}.
+     */
+    public static String hubWheel(Theme theme, String hubFillRole, String satelliteFillRole,
+            int itemCount, double w, double h) {
+        double cx = w / 2;
+        double cy = h / 2;
+        double outerR = Math.min(w, h) / 2 * 0.92;
+        double hubR = outerR * 0.32;
+        double satelliteR = outerR * 0.16;
+        double spokeR = outerR - satelliteR;
+        double step = 2 * Math.PI / itemCount;
+        StringBuilder spokes = new StringBuilder();
+        StringBuilder satellites = new StringBuilder();
+        for (int i = 0; i < itemCount; i++) {
+            double angle = -Math.PI / 2 + i * step;
+            double sx = cx + spokeR * Math.cos(angle);
+            double sy = cy + spokeR * Math.sin(angle);
+            String fillRole = i % 2 == 0 ? hubFillRole : satelliteFillRole;
+            spokes.append("<line x1=\"%s\" y1=\"%s\" x2=\"%s\" y2=\"%s\" stroke=\"%s\" stroke-width=\"2\"/>"
+                    .formatted(fmt(cx), fmt(cy), fmt(sx), fmt(sy), color(theme, fillRole)));
+            satellites.append(disc(theme, fillRole, i + 1, sx, sy, satelliteR));
+        }
+        String hub = "<circle cx=\"%s\" cy=\"%s\" r=\"%s\" fill=\"%s\"/>"
+                .formatted(fmt(cx), fmt(cy), fmt(hubR), color(theme, hubFillRole));
+        return svg(w, h, spokes.toString() + hub + satellites);
+    }
+
+    /**
+     * One legend row's colored swatch for the {@code HUB_SPOKE} design —
+     * identical small-disc styling to {@link #cycleSwatch} (alternating the
+     * two fill roles by point index), kept as its own named entry point so
+     * {@code LayoutEngine}'s per-archetype dispatch stays one kind per
+     * archetype even though the two legends render the same way.
+     */
+    public static String hubSwatch(Theme theme, String firstFillRole, String secondFillRole,
+            int number, double w, double h) {
+        return cycleSwatch(theme, firstFillRole, secondFillRole, number, w, h);
+    }
+
+    /**
+     * The {@code SPLIT_VISUAL} design's stacked cards — the identical
+     * rounded-card-with-corner-badge painting as {@link #pointCard}, kept as
+     * its own named entry point because {@code LayoutEngine} routes it
+     * through a two-column (prose left, cards right) layout instead of
+     * {@code CARD_GRID}'s paired-row grid.
+     */
+    public static String splitCard(Theme theme, String cardFillRole, String badgeFillRole,
+            int number, double w, double h) {
+        return pointCard(theme, cardFillRole, badgeFillRole, number, w, h);
     }
 
     /** A filled circle with a centered bold two-digit number, contrast-picked against its own fill. */

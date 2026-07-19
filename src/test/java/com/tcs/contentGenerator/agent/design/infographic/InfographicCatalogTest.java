@@ -39,6 +39,9 @@ class InfographicCatalogTest {
         assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("card-grid")));
         assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("kpi-bars")));
         assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("timeline")));
+        assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("cycle")));
+        assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("hub-spoke")));
+        assertTrue(CATALOG.all().stream().anyMatch(s -> s.name().equals("split-visual")));
     }
 
     @Test
@@ -63,6 +66,30 @@ class InfographicCatalogTest {
         assertEquals(InfographicSpec.Archetype.TIMELINE, spec.archetype());
         assertEquals("timelineNode", spec.shape().kind());
         assertFalse(spec.wantsNumbers());
+    }
+
+    @Test
+    void loadsTheCycleSpec() {
+        InfographicSpec spec = CATALOG.get("cycle");
+        assertEquals(InfographicSpec.Archetype.CYCLE, spec.archetype());
+        assertEquals("donutRing", spec.shape().kind());
+        assertFalse(spec.wantsNumbers());
+    }
+
+    @Test
+    void loadsTheHubSpokeSpec() {
+        InfographicSpec spec = CATALOG.get("hub-spoke");
+        assertEquals(InfographicSpec.Archetype.HUB_SPOKE, spec.archetype());
+        assertEquals("hubWheel", spec.shape().kind());
+        assertFalse(spec.wantsNumbers());
+    }
+
+    @Test
+    void loadsTheSplitVisualSpec() {
+        InfographicSpec spec = CATALOG.get("split-visual");
+        assertEquals(InfographicSpec.Archetype.SPLIT_VISUAL, spec.archetype());
+        assertEquals("splitCard", spec.shape().kind());
+        assertEquals(4, spec.maxItems(), "SPLIT_VISUAL fits 3-4 sub-points, not a longer list");
     }
 
     @Test

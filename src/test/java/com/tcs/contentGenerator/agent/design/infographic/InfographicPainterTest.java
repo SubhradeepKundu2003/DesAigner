@@ -80,6 +80,60 @@ class InfographicPainterTest {
     }
 
     @Test
+    void donutRingAlternatesTheTwoFillRolesAcrossItsWedges() throws Exception {
+        String svg = InfographicPainter.donutRing(THEME, "primary", "secondary", 4, 200, 200);
+        assertTrue(svg.contains("<path"), "wedges are drawn as SVG paths");
+        assertTrue(svg.contains("#4E84C4"), "wedge carries the resolved primary color");
+        assertTrue(svg.contains("#FBB034"), "wedge carries the resolved secondary color");
+        BufferedImage image = rasterize(svg);
+        assertEquals(200, image.getWidth());
+    }
+
+    @Test
+    void cycleSwatchAlternatesFillByPointNumber() throws Exception {
+        String first = InfographicPainter.cycleSwatch(THEME, "primary", "secondary", 1, 60, 30);
+        String second = InfographicPainter.cycleSwatch(THEME, "primary", "secondary", 2, 60, 30);
+        assertTrue(first.contains("#4E84C4"), "odd point uses the first fill role");
+        assertTrue(second.contains("#FBB034"), "even point uses the second fill role");
+        assertTrue(first.contains(">01<") && second.contains(">02<"), "swatch carries the point number");
+        rasterize(first);
+        rasterize(second);
+    }
+
+    @Test
+    void hubWheelDrawsSpokesFromAHubToANumberedSatelliteForEveryPoint() throws Exception {
+        String svg = InfographicPainter.hubWheel(THEME, "primary", "secondary", 4, 200, 200);
+        assertTrue(svg.contains("<line"), "spoke lines present");
+        assertTrue(svg.contains("<circle"), "hub and satellite discs present");
+        assertTrue(svg.contains("#4E84C4"), "wheel carries the resolved primary color");
+        assertTrue(svg.contains("#FBB034"), "wheel carries the resolved secondary color");
+        assertTrue(svg.contains(">03<"), "satellite discs carry their point number");
+        BufferedImage image = rasterize(svg);
+        assertEquals(200, image.getWidth());
+    }
+
+    @Test
+    void hubSwatchAlternatesFillByPointNumberLikeTheCycleSwatch() throws Exception {
+        String first = InfographicPainter.hubSwatch(THEME, "primary", "secondary", 1, 60, 30);
+        String second = InfographicPainter.hubSwatch(THEME, "primary", "secondary", 2, 60, 30);
+        assertTrue(first.contains("#4E84C4"), "odd point uses the first fill role");
+        assertTrue(second.contains("#FBB034"), "even point uses the second fill role");
+        assertTrue(first.contains(">01<") && second.contains(">02<"), "swatch carries the point number");
+        rasterize(first);
+        rasterize(second);
+    }
+
+    @Test
+    void splitCardCarriesAShadowedCardAndACornerBadgeLikeThePointCard() throws Exception {
+        String svg = InfographicPainter.splitCard(THEME, "surface", "primary", 2, 200, 90);
+        assertTrue(svg.contains("feGaussianBlur"), "card must carry the shadow filter");
+        assertTrue(svg.contains("#EBEBEB"), "card carries the resolved surface fill");
+        assertTrue(svg.contains("<circle") && svg.contains(">02<"), "corner badge with the item number");
+        BufferedImage image = rasterize(svg);
+        assertEquals(200, image.getWidth());
+    }
+
+    @Test
     void encodePaintRoundTripSurvivesTheAssetId() throws Exception {
         String params = InfographicPainter.encode(
                 new InfographicSpec.Shape("numberedBars", "primary", "text"), 2);
@@ -100,6 +154,11 @@ class InfographicPainterTest {
         rasterize(InfographicPainter.paint("chevronBars.primary.secondary.1", THEME, 480, 40));
         rasterize(InfographicPainter.paint("pointCard.surface.primary.2", THEME, 240, 140));
         rasterize(InfographicPainter.paint("timelineNode.divider.primary.3", THEME, 240, 60));
+        rasterize(InfographicPainter.paint("donutRing.primary.secondary.4", THEME, 200, 200));
+        rasterize(InfographicPainter.paint("cycleSwatch.primary.secondary.1", THEME, 60, 30));
+        rasterize(InfographicPainter.paint("hubWheel.primary.secondary.4", THEME, 200, 200));
+        rasterize(InfographicPainter.paint("hubSwatch.primary.secondary.1", THEME, 60, 30));
+        rasterize(InfographicPainter.paint("splitCard.surface.primary.2", THEME, 200, 90));
     }
 
     private static BufferedImage rasterize(String svg) throws Exception {

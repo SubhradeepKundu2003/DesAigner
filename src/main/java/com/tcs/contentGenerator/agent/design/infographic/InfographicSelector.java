@@ -21,11 +21,13 @@ import com.tcs.contentGenerator.agent.planning.NewsletterSection;
  *       compatibility, text lengths within the spec's slot capacities, and
  *       {@code wantsNumbers} specs only when every point carries a figure;</li>
  *   <li>intent: cheap keyword signals admit specialist archetypes (sequence
- *       words → {@code TIMELINE}, cycle words → {@code CYCLE}, all-numeric →
- *       {@code KPI_BARS}); {@code NUMBERED_LIST}/{@code CARD_GRID} are the
- *       always-admitted generalists. {@code HUB_SPOKE}/{@code SPLIT_VISUAL}
- *       stay signal-gated and currently have no signal — revisit when their
- *       specs land;</li>
+ *       words → {@code TIMELINE}, cycle words → {@code CYCLE}, central-theme
+ *       words → {@code HUB_SPOKE} and {@code CYCLE}, all-numeric →
+ *       {@code KPI_BARS}); {@code NUMBERED_LIST}/{@code CARD_GRID}/
+ *       {@code SPLIT_VISUAL} are the always-admitted generalists — a single
+ *       article with 3-4 points reads fine as prose-plus-cards even without a
+ *       specific signal, and {@code SPLIT_VISUAL}'s own item-count range does
+ *       the real narrowing;</li>
  *   <li>a random pick among what survives, seeded by jobId + section name so
  *       re-rendering the same job is stable while different issues vary;</li>
  *   <li>variety: a design already used this issue is never picked again
@@ -45,6 +47,8 @@ public class InfographicSelector {
             + "first|second|third|then|next|finally)\\b");
     private static final Pattern CYCLE_WORDS = Pattern.compile(
             "(?i)\\b(cycle|lifecycle|loop|continuous|recurring|iterat\\w*)\\b");
+    private static final Pattern CENTRAL_WORDS = Pattern.compile(
+            "(?i)\\b(hub|framework|ecosystem|foundation|core|central|wheel|spokes?|dimension|facet)\\b");
     private static final Pattern FIGURE = Pattern.compile("\\d");
 
     private final List<InfographicSpec> library;
@@ -89,12 +93,17 @@ public class InfographicSelector {
     private Set<InfographicSpec.Archetype> admittedArchetypes(List<Point> points) {
         // the safe generalists fit any enumerable content
         Set<InfographicSpec.Archetype> admitted = EnumSet.of(
-                InfographicSpec.Archetype.NUMBERED_LIST, InfographicSpec.Archetype.CARD_GRID);
+                InfographicSpec.Archetype.NUMBERED_LIST, InfographicSpec.Archetype.CARD_GRID,
+                InfographicSpec.Archetype.SPLIT_VISUAL);
         String labels = String.join(" ", points.stream().map(Point::label).toList());
         if (SEQUENCE_WORDS.matcher(labels).find()) {
             admitted.add(InfographicSpec.Archetype.TIMELINE);
         }
         if (CYCLE_WORDS.matcher(labels).find()) {
+            admitted.add(InfographicSpec.Archetype.CYCLE);
+        }
+        if (CENTRAL_WORDS.matcher(labels).find()) {
+            admitted.add(InfographicSpec.Archetype.HUB_SPOKE);
             admitted.add(InfographicSpec.Archetype.CYCLE);
         }
         if (allPointsCarryFigures(points)) {
