@@ -2,6 +2,8 @@ package com.tcs.contentGenerator.web;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,6 +38,8 @@ import com.tcs.contentGenerator.render.RendererRegistry;
 @RestController
 @RequestMapping("/api/designs")
 public class DesignApiController {
+
+    private static final Logger log = LoggerFactory.getLogger(DesignApiController.class);
 
     private final DesignStore designStore;
     private final FlagStore flagStore;
@@ -79,7 +83,19 @@ public class DesignApiController {
                     "Export blocked: unresolved fact-validation flags at blocking severity — "
                             + "review them at /api/designs/" + jobId + "/flags");
         }
-        byte[] bytes = rendererRegistry.render(exportFormat, document);
+        byte[] bytes;
+        try {
+            bytes = rendererRegistry.render(exportFormat, document);
+        } catch (RuntimeException e) {
+            // A renderer failure here is content-triggered (a malformed
+            // string, an unsupported asset, ...), not something the caller
+            // can retry around — log the full cause server-side for
+            // diagnosis and answer with a clear message instead of letting
+            // it fall through to a generic, undiagnosable 500.
+            log.error("Export failed for job {} format {}", jobId, format, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to render " + format + " for job " + jobId + ": " + e.getMessage());
+        }
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(exportFormat.mediaType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"newsletter-"

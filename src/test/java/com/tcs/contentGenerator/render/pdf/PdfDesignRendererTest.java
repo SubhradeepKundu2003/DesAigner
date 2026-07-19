@@ -163,6 +163,38 @@ class PdfDesignRendererTest {
         }
     }
 
+    /**
+     * Real bug this test caught: {@code altText} carries free LLM-generated
+     * text (article headlines, section titles — see {@code ImagePlacer}) into
+     * an {@code alt="..."} HTML attribute. A headline containing a literal
+     * quotation mark (small models return these routinely, e.g. a quoted
+     * phrase mid-headline) used to break openhtmltopdf's strict XML parse and
+     * fail the whole PDF export — while the lenient browser preview and the
+     * plain-text PPTX renderer both kept working, so the failure looked
+     * random/platform-dependent rather than content-triggered.
+     */
+    @Test
+    void altTextContainingAQuoteStillRendersAValidPdf() throws Exception {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\">"
+                + "<rect width=\"40\" height=\"40\" fill=\"#000000\"/></svg>";
+        Asset asset = new Asset("photo-1", "image", "assets/x.svg", null, null);
+        ImageBox photo = new ImageBox("cmp-1", ComponentRole.IMAGE_PLACEHOLDER,
+                new Frame(48, 48, 40, 40), 0, false, null, "photo-1", "Team says \"great quarter\"");
+        DesignDocument document = new DesignDocument(1, 1, new DesignMeta("Issue", "job-1"), THEME,
+                List.of(asset), List.of(new Page("page-1", List.of(photo))));
+        PdfDesignRenderer svgRenderer = new PdfDesignRenderer(
+                new HtmlDesignRenderer(
+                        new FixedStorageService(Map.of("assets/x.svg", svg.getBytes(StandardCharsets.UTF_8))),
+                        new BrandFontRegistry()),
+                new BrandFontRegistry());
+
+        byte[] pdfBytes = svgRenderer.render(document);
+
+        try (PDDocument pdf = Loader.loadPDF(pdfBytes)) {
+            assertEquals(1, pdf.getNumberOfPages());
+        }
+    }
+
     /** No fixture here uses a real image asset, so every method is unreachable. */
     private static final class NoopStorageService implements StorageService {
         @Override

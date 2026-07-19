@@ -218,10 +218,23 @@ public class HtmlDesignRenderer implements DesignRenderer {
         return theme.colors().getOrDefault(role, fallback);
     }
 
+    /**
+     * Full XML escaping, not just the three text-content entities: {@code
+     * altText} (headlines/section titles, free LLM-generated text) lands
+     * inside a double-quoted {@code alt="..."} attribute at line ~123, and an
+     * un-escaped {@code "} there breaks openhtmltopdf's strict XML parse —
+     * the PDF export fails on any content containing a literal quote, while
+     * the lenient browser HTML preview and the plain-text PPTX renderer both
+     * keep working, making the bug look "random"/content-dependent rather
+     * than a parse rule. Escaping quotes in text-content positions too is
+     * harmless (valid entities there) and keeps this one function safe to
+     * reuse for any future attribute value.
+     */
     private static String escape(String text) {
         if (text == null) {
             return "";
         }
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
     }
 }

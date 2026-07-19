@@ -138,6 +138,33 @@ class HtmlDesignRendererTest {
                 "expected the SVG logo to be embedded with an image/svg+xml data URI: " + html);
     }
 
+    /**
+     * Real bug this test caught: {@code altText} (free LLM-generated text —
+     * article headlines, section titles) lands inside a double-quoted
+     * {@code alt="..."} attribute. A literal {@code "} in that text used to
+     * flow through un-escaped, breaking openhtmltopdf's strict XML parse and
+     * failing PDF export while the lenient browser preview kept working —
+     * making the failure look random rather than content-triggered.
+     */
+    @Test
+    void escapesDoubleQuotesInAltTextSoTheAttributeCannotBreakOut() {
+        byte[] svgBytes = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>".getBytes(StandardCharsets.UTF_8);
+        Asset asset = new Asset("photo-1", "image", "assets/x.svg", null, null);
+        ImageBox photo = new ImageBox("cmp-1", ComponentRole.IMAGE_PLACEHOLDER,
+                new Frame(48, 48, 40, 40), 0, false, null, "photo-1", "Team says \"great quarter\"");
+        DesignDocument document = new DesignDocument(1, 1, new DesignMeta("Issue", "job-1"), THEME,
+                List.of(asset), List.of(new Page("page-1", List.of(photo))));
+        HtmlDesignRenderer renderer = new HtmlDesignRenderer(
+                new FixedStorageService(Map.of("assets/x.svg", svgBytes)), new BrandFontRegistry());
+
+        String html = renderer.renderHtml(document, "");
+
+        assertTrue(html.contains("alt=\"Team says &quot;great quarter&quot;\""),
+                "expected the embedded quotes to be escaped as entities: " + html);
+        assertFalse(html.contains("alt=\"Team says \"great quarter\"\""),
+                "an un-escaped quote here would prematurely close the attribute: " + html);
+    }
+
     /** No fixture here uses a real image asset, so every method is unreachable. */
     private static final class NoopStorageService implements StorageService {
         @Override
