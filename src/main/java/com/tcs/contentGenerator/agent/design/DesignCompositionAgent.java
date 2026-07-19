@@ -103,6 +103,7 @@ public class DesignCompositionAgent implements Agent {
         // The section icon files are black stroke SVGs — invisible on a dark page.
         // Dark themes keep the colored-dot fallback (theme roles, always visible).
         Map<NewsletterSection, String> iconRefs = darkBackground ? Map.of() : listSectionIcons();
+        Map<String, String> pointIcons = darkBackground ? Map.of() : listPointIcons();
         if (darkBackground) {
             log.info("Dark page background — using dot section icons");
         }
@@ -112,7 +113,7 @@ public class DesignCompositionAgent implements Agent {
                 context.getJobId(), darkBackground);
         List<SectionComposition> sections = newsletter.sections().stream()
                 .filter(section -> !section.articles().isEmpty())
-                .map(section -> compose(section, iconRefs, selector))
+                .map(section -> compose(section, iconRefs, pointIcons, selector))
                 .toList();
         CompositionPlan plan = new CompositionPlan(template.name(), sections);
         DesignDocument document = layoutEngine.layout(plan, template, newsletter.issueTitle(), context.getJobId());
@@ -137,6 +138,15 @@ public class DesignCompositionAgent implements Agent {
                 assets.add(new Asset(section.iconAssetId(), "image", iconRefs.get(section.section()), null, null));
             }
         }
+        java.util.Set<String> attachedPointIcons = new java.util.HashSet<>();
+        for (SectionComposition section : sections) {
+            for (String pointIconId : section.pointIconRefs()) {
+                if (pointIconId != null && attachedPointIcons.add(pointIconId)) {
+                    String keyword = pointIconId.substring(IconMatcher.POINT_ICON_ASSET_PREFIX.length());
+                    assets.add(new Asset(pointIconId, "image", pointIcons.get(keyword), null, null));
+                }
+            }
+        }
         assets.addAll(decorAssets(document, template, context.getJobId()));
         document = new DesignDocument(document.schemaVersion(), document.revision(), document.meta(),
                 document.theme(), List.copyOf(assets), document.pages());
@@ -146,7 +156,7 @@ public class DesignCompositionAgent implements Agent {
     }
 
     private SectionComposition compose(GeneratedSection section, Map<NewsletterSection, String> iconRefs,
-            InfographicSelector selector) {
+            Map<String, String> pointIcons, InfographicSelector selector) {
         NewsletterSection newsletterSection = section.section();
         List<GeneratedArticle> articles = section.articles();
         String iconColorRole = IconMatcher.colorRoleFor(newsletterSection);
@@ -173,9 +183,15 @@ public class DesignCompositionAgent implements Agent {
                 if (spec.isPresent()) {
                     log.info("[{}] infographic '{}' chosen for {} point(s)",
                             newsletterSection.title(), spec.get().name(), article.points().size());
+                    List<String> pointIconRefs = article.points().stream()
+                            .map(point -> {
+                                String keyword = IconMatcher.matchPointIcon(point.label(), pointIcons.keySet());
+                                return keyword == null ? null : IconMatcher.assetIdForPoint(keyword);
+                            })
+                            .toList();
                     return new SectionComposition(newsletterSection, SectionPattern.INFOGRAPHIC,
                             articles, iconColorRole, iconAssetId, null, null, List.of(),
-                            spec.get(), article.points());
+                            spec.get(), article.points(), pointIconRefs);
                 }
             }
             List<SectionComposition.Stat> stats = extractStats(articles.get(0));
@@ -213,6 +229,31 @@ public class DesignCompositionAgent implements Agent {
                 refs.putIfAbsent(NewsletterSection.valueOf(name), ref);
             } catch (IllegalArgumentException notASectionName) {
                 log.debug("Ignoring non-section file in {}: {}", ICONS_FOLDER, ref);
+            }
+        }
+        return refs;
+    }
+
+    /**
+     * Every file under {@code assets/ICONS/} whose basename is <em>not</em> a
+     * {@link NewsletterSection} name — the same folder {@link #listSectionIcons}
+     * scans, read the other way round: basename (lowercased, extension
+     * stripped) becomes the keyword {@link IconMatcher#matchPointIcon}
+     * matches infographic point labels against. Editors add a per-point icon
+     * by dropping e.g. {@code growth.svg} in next to the section icons — no
+     * code or config change.
+     */
+    private Map<String, String> listPointIcons() {
+        Map<String, String> refs = new java.util.HashMap<>();
+        for (String ref : storage.list(brandAssetsRoot + "/" + ICONS_FOLDER)) {
+            String base = ref.substring(ref.lastIndexOf('/') + 1);
+            int dot = base.lastIndexOf('.');
+            String stem = dot > 0 ? base.substring(0, dot) : base;
+            try {
+                NewsletterSection.valueOf(stem.toUpperCase(Locale.ROOT));
+                // a section icon, already covered by listSectionIcons
+            } catch (IllegalArgumentException notASectionName) {
+                refs.putIfAbsent(stem.toLowerCase(Locale.ROOT), ref);
             }
         }
         return refs;

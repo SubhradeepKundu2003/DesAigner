@@ -257,6 +257,68 @@ class DesignCompositionAgentTest {
     }
 
     @Test
+    void pointWithAMatchingIconFileGetsARealIconAssetAndABlankDisc() {
+        ContentItem item = new ContentItem("Apollo", "summary", BusinessCategory.PROJECT_UPDATES,
+                ItemType.PROJECT, List.of(), List.of());
+        GeneratedArticle article = new GeneratedArticle("Apollo lands on time",
+                "A short project body.", new PlannedItem(item, 9, "notable"),
+                List.of(new GeneratedArticle.Point("Discovery", "Requirements signed off."),
+                        new GeneratedArticle.Point("Revenue growth", "Development finished early."),
+                        new GeneratedArticle.Point("Go-live", "Rollout reached every region.")));
+        GeneratedSection section = new GeneratedSection(NewsletterSection.PROJECT_UPDATES, List.of(article));
+        PipelineContext context = new PipelineContext("job-1", List.of());
+        context.setGeneratedNewsletter(new GeneratedNewsletter("Test Issue", List.of(section)));
+
+        ListingStorage storage = new ListingStorage(List.of(
+                "assets/ICONS/growth.svg", "assets/ICONS/DELIVERY_HIGHLIGHTS.svg"));
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                storage, INFOGRAPHICS, "assets");
+        agent.execute(context);
+
+        DesignDocument document = context.getDesignDocument();
+        // only the "Revenue growth" point matches -> exactly one real icon asset attached
+        Asset icon = assetById(document, "icon-point-growth");
+        assertEquals("assets/ICONS/growth.svg", icon.storedRef());
+
+        List<ImageBox> rows = document.pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> b.assetId() != null && b.assetId().startsWith("decor-infographic-"))
+                .toList();
+        assertEquals(1, rows.stream().filter(b -> b.assetId().contains(".icon-")).count(),
+                "exactly one row's shape asset id carries the .icon marker");
+
+        long iconBoxes = document.pages().stream()
+                .flatMap(p -> p.components().stream())
+                .filter(ImageBox.class::isInstance).map(ImageBox.class::cast)
+                .filter(b -> "icon-point-growth".equals(b.assetId()))
+                .count();
+        assertEquals(1, iconBoxes, "one real icon ImageBox placed over the matched point's row");
+    }
+
+    @Test
+    void pointsWithNoMatchingIconFileKeepTheirNumberedDiscs() {
+        ContentItem item = new ContentItem("Apollo", "summary", BusinessCategory.PROJECT_UPDATES,
+                ItemType.PROJECT, List.of(), List.of());
+        GeneratedArticle article = new GeneratedArticle("Apollo lands on time",
+                "A short project body.", new PlannedItem(item, 9, "notable"),
+                List.of(new GeneratedArticle.Point("Discovery", "Requirements signed off."),
+                        new GeneratedArticle.Point("Build", "Development finished early."),
+                        new GeneratedArticle.Point("Go-live", "Rollout reached every region.")));
+        GeneratedSection section = new GeneratedSection(NewsletterSection.PROJECT_UPDATES, List.of(article));
+        PipelineContext context = new PipelineContext("job-1", List.of());
+        context.setGeneratedNewsletter(new GeneratedNewsletter("Test Issue", List.of(section)));
+
+        DesignCompositionAgent agent = new DesignCompositionAgent(TEMPLATES, new LayoutEngine(),
+                new ListingStorage(List.of("assets/ICONS/growth.svg")), INFOGRAPHICS, "assets");
+        agent.execute(context);
+
+        assertTrue(context.getDesignDocument().assets().stream()
+                        .noneMatch(a -> a.id().startsWith("icon-point-")),
+                "no point matches 'growth' — no point-icon asset should be attached");
+    }
+
+    @Test
     void twoPointsAreNotEnoughForAnInfographic() {
         ContentItem item = new ContentItem("Apollo", "summary", BusinessCategory.PROJECT_UPDATES,
                 ItemType.PROJECT, List.of(), List.of());

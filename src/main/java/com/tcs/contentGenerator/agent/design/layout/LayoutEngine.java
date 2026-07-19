@@ -726,6 +726,25 @@ public class LayoutEngine {
         placeArticleBody(p, article.body(), link, p.contentWidth(), theme);
     }
 
+    /** The point's matched icon asset id ({@code SectionComposition.pointIconRefs}, 1-based {@code number}), or null. */
+    private String pointIconRef(SectionComposition section, int number) {
+        List<String> refs = section.pointIconRefs();
+        int index = number - 1;
+        return index >= 0 && index < refs.size() ? refs.get(index) : null;
+    }
+
+    /**
+     * Places a real per-point icon image centered on {@code (cx, cy)} — the
+     * exact spot {@code InfographicPainter} would otherwise paint a numbered
+     * disc/badge/node, per the matching {@code encodeIconBacked} call that
+     * left it blank.
+     */
+    private void placePointIcon(Paginator p, String iconRef, double cx, double cy, double size) {
+        p.add(new ImageBox(p.nextId(), ComponentRole.DECORATION,
+                new Frame(cx - size / 2, cy - size / 2, size, size), 0, true, null,
+                iconRef, "infographic point icon"));
+    }
+
     /**
      * The NUMBERED_LIST/KPI_BARS row shape: each point is a full-width bar
      * (painted by {@code InfographicPainter.numberedBars}/{@code chevronBars})
@@ -758,13 +777,19 @@ public class LayoutEngine {
             double h = p.reserve(rowHeight, "infographic-row:" + point.label());
             double y = p.y();
             if (drawShapes) {
+                String iconRef = pointIconRef(section, i + 1);
                 String id = p.nextId();
+                String params = iconRef != null
+                        ? InfographicPainter.encodeIconBacked(section.infographic().shape(), i + 1)
+                        : InfographicPainter.encode(section.infographic().shape(), i + 1);
                 p.add(new ImageBox(id, ComponentRole.DECORATION,
                         new Frame(p.x(), y, p.contentWidth(), h), 0, true, null,
-                        DECOR_ASSET_PREFIX + "infographic-"
-                                + InfographicPainter.encode(section.infographic().shape(), i + 1)
-                                + "-" + id,
+                        DECOR_ASSET_PREFIX + "infographic-" + params + "-" + id,
                         "infographic row"));
+                if (iconRef != null) {
+                    placePointIcon(p, iconRef, p.x() + InfographicPainter.DISC / 2, y + h / 2,
+                            InfographicPainter.DISC);
+                }
             }
             double contentTop = y + Math.max(InfographicPainter.BAR_PADDING, (h - content) / 2);
             addTextAt(p, textX, contentTop, textWidth, labelHeight,
@@ -837,12 +862,20 @@ public class LayoutEngine {
     private void placeCardPoint(Paginator p, GeneratedArticle.Point point, int number, SectionComposition section,
             Theme theme, String labelRef, TextStyle labelStyle, String textRef, TextStyle textStyle,
             double x, double y, double width, double height, SourceLink link) {
+        String iconRef = pointIconRef(section, number);
         String id = p.nextId();
+        String params = iconRef != null
+                ? InfographicPainter.encodeIconBacked(section.infographic().shape(), number)
+                : InfographicPainter.encode(section.infographic().shape(), number);
         p.add(new ImageBox(id, ComponentRole.DECORATION, new Frame(x, y, width, height),
                 0, true, null,
-                DECOR_ASSET_PREFIX + "infographic-"
-                        + InfographicPainter.encode(section.infographic().shape(), number) + "-" + id,
+                DECOR_ASSET_PREFIX + "infographic-" + params + "-" + id,
                 "infographic card"));
+        if (iconRef != null) {
+            double badgeCenter = InfographicPainter.CARD_INSET + InfographicPainter.CARD_PADDING
+                    + InfographicPainter.CARD_BADGE / 2;
+            placePointIcon(p, iconRef, x + badgeCenter, y + badgeCenter, InfographicPainter.CARD_BADGE);
+        }
         double innerWidth = width - 2 * InfographicPainter.CARD_PADDING;
         double textY = y + InfographicPainter.CARD_PADDING + InfographicPainter.CARD_BADGE + INFO_LABEL_TEXT_GAP;
         double labelHeight = measurer.heightOf(point.label(), labelStyle, innerWidth);
@@ -884,13 +917,19 @@ public class LayoutEngine {
             double rowHeight = Math.max(content, InfographicPainter.TIMELINE_NODE + 4);
             double h = p.reserve(rowHeight, "infographic-timeline:" + point.label());
             double y = p.y();
+            String iconRef = pointIconRef(section, i + 1);
             String id = p.nextId();
+            String params = iconRef != null
+                    ? InfographicPainter.encodeIconBacked(section.infographic().shape(), i + 1)
+                    : InfographicPainter.encode(section.infographic().shape(), i + 1);
             p.add(new ImageBox(id, ComponentRole.DECORATION,
                     new Frame(p.x(), y, p.contentWidth(), h), 0, true, null,
-                    DECOR_ASSET_PREFIX + "infographic-"
-                            + InfographicPainter.encode(section.infographic().shape(), i + 1)
-                            + "-" + id,
+                    DECOR_ASSET_PREFIX + "infographic-" + params + "-" + id,
                     "infographic timeline"));
+            if (iconRef != null) {
+                placePointIcon(p, iconRef, p.x() + p.contentWidth() / 2, y + h / 2,
+                        InfographicPainter.TIMELINE_NODE);
+            }
             double textX = i % 2 == 1 ? rightX : p.x();
             double contentTop = y + Math.max(0, (h - content) / 2);
             addTextAt(p, textX, contentTop, half, labelHeight,
@@ -953,12 +992,18 @@ public class LayoutEngine {
             double rowHeight = Math.max(content, InfographicPainter.DISC + 4);
             double h = p.reserve(rowHeight, "infographic-cycle:" + point.label());
             double y = p.y();
+            String iconRef = pointIconRef(section, i + 1);
             String id = p.nextId();
+            String swatchParams = "cycleSwatch." + shape.barFill() + "." + shape.leadFill() + "." + (i + 1)
+                    + (iconRef != null ? ".icon" : "");
             p.add(new ImageBox(id, ComponentRole.DECORATION,
                     new Frame(p.x(), y, p.contentWidth(), h), 0, true, null,
-                    DECOR_ASSET_PREFIX + "infographic-cycleSwatch." + shape.barFill() + "."
-                            + shape.leadFill() + "." + (i + 1) + "-" + id,
+                    DECOR_ASSET_PREFIX + "infographic-" + swatchParams + "-" + id,
                     "infographic cycle legend"));
+            if (iconRef != null) {
+                placePointIcon(p, iconRef, p.x() + InfographicPainter.DISC / 2, y + h / 2,
+                        InfographicPainter.DISC);
+            }
             double contentTop = y + Math.max(0, (h - content) / 2);
             addTextAt(p, textX, contentTop, textWidth, labelHeight,
                     ComponentRole.INFOGRAPHIC_LABEL, labelRef, point.label(), link);
@@ -1015,12 +1060,18 @@ public class LayoutEngine {
             double rowHeight = Math.max(content, InfographicPainter.DISC + 4);
             double h = p.reserve(rowHeight, "infographic-hub:" + point.label());
             double y = p.y();
+            String iconRef = pointIconRef(section, i + 1);
             String id = p.nextId();
+            String swatchParams = "hubSwatch." + shape.barFill() + "." + shape.leadFill() + "." + (i + 1)
+                    + (iconRef != null ? ".icon" : "");
             p.add(new ImageBox(id, ComponentRole.DECORATION,
                     new Frame(p.x(), y, p.contentWidth(), h), 0, true, null,
-                    DECOR_ASSET_PREFIX + "infographic-hubSwatch." + shape.barFill() + "."
-                            + shape.leadFill() + "." + (i + 1) + "-" + id,
+                    DECOR_ASSET_PREFIX + "infographic-" + swatchParams + "-" + id,
                     "infographic hub legend"));
+            if (iconRef != null) {
+                placePointIcon(p, iconRef, p.x() + InfographicPainter.DISC / 2, y + h / 2,
+                        InfographicPainter.DISC);
+            }
             double contentTop = y + Math.max(0, (h - content) / 2);
             addTextAt(p, textX, contentTop, textWidth, labelHeight,
                     ComponentRole.INFOGRAPHIC_LABEL, labelRef, point.label(), link);

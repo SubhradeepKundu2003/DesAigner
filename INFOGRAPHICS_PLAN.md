@@ -197,9 +197,21 @@ with the chosen `InfographicSpec` name + resolved points.
 - Emits one `ImageBox` with asset id `decor-infographic-<specName>-<cmpId>`
   covering the band — the same well-known-decor-id contract the renderers
   already resolve, so **HTML/PPTX/PDF renderers need zero changes**.
-- Per-point icons: reuse `assets/ICONS/` + `IconMatcher`, extended with a
-  keyword→icon match over point labels; no icon found → the painter draws
-  the numbered disc instead (every reference design has a numeric variant).
+- Per-point icons — DONE (2026-07-20): `IconMatcher.matchPointIcon` scans the
+  same `assets/ICONS/` folder read the other way round — any file whose
+  basename isn't a `NewsletterSection` name (`DesignCompositionAgent
+  .listPointIcons`) becomes a keyword, matched as a whole word (longest
+  wins) against each point's label. A match gets a real `ImageBox` (its own
+  `Asset`, `icon-point-<keyword>` id, same "real file, not synthesized"
+  contract as section icons) centered exactly where the disc/badge/node
+  would sit, and the shape's asset id carries a trailing `.icon` marker
+  (`InfographicPainter.encodeIconBacked`) so the painted disc underneath
+  stays blank instead of drawing the number — no double-rendering. No match
+  → the numbered disc, unchanged (every reference design has a numeric
+  variant, so a broken/missing icon file never loses content, only the
+  icon). Applies to every per-point shape (bar rows, card badges, timeline
+  nodes, split cards, cycle/hub swatch legends); the whole-set `donutRing`/
+  `hubWheel` images are unaffected — icons only replace *per-point* numbers.
 
 **`InfographicPainter`** (new, sibling of `DecorPainter`):
 
@@ -258,7 +270,7 @@ export-faithful in PPTX/PDF where SVG text support is weakest.
 | **4b-i** | `TIMELINE` (`timelineNode` painter: vertical connector + numbered node, text alternating left/right — the zigzag look) | one more archetype live | ✅ DONE 2026-07-11 |
 | **4b-ii** | `CYCLE` (`donutRing` painter: N alternating wedges as one ring image + `cycleSwatch` per-point legend rows below) | one more archetype live | ✅ DONE 2026-07-11 |
 | **4b-iii** | `HUB_SPOKE` (`hubWheel` painter: hub circle + spokes to numbered satellites, one image for the set + `hubSwatch` legend rows, mirrors `CYCLE`'s ring/legend split) + `SPLIT_VISUAL` (`splitCard` painter: same rounded-card-with-badge as `pointCard`, routed through a dedicated two-column layout — article prose left, stacked cards right) | remaining two archetypes live, 7/7 | ✅ DONE 2026-07-20 |
-| **5** | Fit-check retry loop + `LayoutLint` rule + per-point icon matching *(char-capacity filter shipped in Phase 3; `LayoutLint` infographic rule shipped 2026-07-20 — see below; fit-check retry loop found moot on inspection, boxes already grow-to-fit; per-point icon matching still pending)* | quality floor | partial |
+| **5** | Fit-check retry loop + `LayoutLint` rule + per-point icon matching *(char-capacity filter shipped in Phase 3; `LayoutLint` infographic rule shipped 2026-07-20; fit-check retry loop found moot on inspection, boxes already grow-to-fit; per-point icon matching shipped 2026-07-20 — see below)* | quality floor | ✅ DONE 2026-07-20 |
 
 Each phase leaves the pipeline green: until Phase 3 wires selection in, no
 production section renders differently.

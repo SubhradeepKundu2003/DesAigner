@@ -134,6 +134,48 @@ class InfographicPainterTest {
     }
 
     @Test
+    void iconBackedNumberedBarLeavesTheDiscBlank() throws Exception {
+        String numbered = InfographicPainter.numberedBars(THEME, "primary", "text", 3, 500, 48, false);
+        String iconBacked = InfographicPainter.numberedBars(THEME, "primary", "text", 3, 500, 48, true);
+        assertTrue(numbered.contains(">03<"), "plain disc still carries the number");
+        assertTrue(iconBacked.contains("<circle"), "icon-backed disc is still painted, just blank");
+        assertTrue(!iconBacked.contains(">03<"), "icon-backed disc must not paint the number — a real icon covers it");
+        rasterize(iconBacked);
+    }
+
+    @Test
+    void iconBackedPointCardLeavesTheBadgeBlank() throws Exception {
+        String iconBacked = InfographicPainter.pointCard(THEME, "surface", "primary", 4, 240, 140, true);
+        assertTrue(iconBacked.contains("<circle"), "badge circle is still painted");
+        assertTrue(!iconBacked.contains(">04<"), "icon-backed badge must not paint the number");
+        rasterize(iconBacked);
+    }
+
+    @Test
+    void iconBackedTimelineNodeLeavesTheNodeBlank() throws Exception {
+        String iconBacked = InfographicPainter.timelineNode(THEME, "divider", "primary", 2, 240, 60, true);
+        assertTrue(!iconBacked.contains(">02<"), "icon-backed node must not paint the number");
+        rasterize(iconBacked);
+    }
+
+    @Test
+    void iconBackedCycleSwatchLeavesItBlank() throws Exception {
+        String iconBacked = InfographicPainter.cycleSwatch(THEME, "primary", "secondary", 1, 60, 30, true);
+        assertTrue(!iconBacked.contains(">01<"), "icon-backed swatch must not paint the number");
+        rasterize(iconBacked);
+    }
+
+    @Test
+    void encodeIconBackedAppendsAnIconMarkerAndPaintRespectsIt() throws Exception {
+        String params = InfographicPainter.encodeIconBacked(
+                new InfographicSpec.Shape("numberedBars", "primary", "text"), 2);
+        assertEquals("numberedBars.primary.text.2.icon", params);
+        String svg = InfographicPainter.paint(params, THEME, 480, 40);
+        assertTrue(!svg.contains(">02<"), "paint() must honor the .icon marker and leave the disc blank");
+        rasterize(svg);
+    }
+
+    @Test
     void encodePaintRoundTripSurvivesTheAssetId() throws Exception {
         String params = InfographicPainter.encode(
                 new InfographicSpec.Shape("numberedBars", "primary", "text"), 2);
