@@ -182,6 +182,86 @@ class ReviewAgentTest {
     }
 
     @Test
+    void doesNotFlagInfographicTextThatFitsCleanlyOnItsOwnShape() {
+        com.tcs.contentGenerator.design.ImageBox shape = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-1", ComponentRole.DECORATION, new Frame(20, 20, 260, 30), 0, true,
+                null, "decor-infographic-numberedBars.1-cmp-1", "infographic row");
+        TextBox label = new TextBox("cmp-2", ComponentRole.INFOGRAPHIC_LABEL, new Frame(50, 24, 200, 12), 1, false,
+                null, "Body", "Step one");
+        PipelineContext context = contextWith(new Page("page-1", List.of(shape, label)));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                        .noneMatch(f -> f.category().startsWith("INFOGRAPHIC_")),
+                "infographic text fully inside its own shape must not be flagged, got "
+                        + context.getReviewReport().findings());
+    }
+
+    @Test
+    void flagsInfographicTextWithNoShapeBehindIt() {
+        TextBox label = new TextBox("cmp-1", ComponentRole.INFOGRAPHIC_LABEL, new Frame(50, 24, 200, 12), 0, false,
+                null, "Body", "Orphaned point");
+        PipelineContext context = contextWith(new Page("page-1", List.of(label)));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                .anyMatch(f -> f.category().equals("INFOGRAPHIC_TEXT_UNANCHORED") && f.componentId().equals("cmp-1")));
+    }
+
+    @Test
+    void flagsInfographicTextThatSpillsOutsideItsShape() {
+        com.tcs.contentGenerator.design.ImageBox shape = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-1", ComponentRole.DECORATION, new Frame(20, 20, 260, 20), 0, true,
+                null, "decor-infographic-numberedBars.1-cmp-1", "infographic row");
+        // taller than the shape it overlaps — the label/row-height math disagreed
+        TextBox label = new TextBox("cmp-2", ComponentRole.INFOGRAPHIC_LABEL, new Frame(50, 24, 200, 40), 1, false,
+                null, "Body", "Overflowing point");
+        PipelineContext context = contextWith(new Page("page-1", List.of(shape, label)));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                .anyMatch(f -> f.category().equals("INFOGRAPHIC_TEXT_OUTSIDE_SHAPE") && f.componentId().equals("cmp-2")));
+    }
+
+    @Test
+    void flagsInfographicTextStraddlingTwoShapes() {
+        com.tcs.contentGenerator.design.ImageBox shapeA = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-1", ComponentRole.DECORATION, new Frame(20, 20, 260, 20), 0, true,
+                null, "decor-infographic-numberedBars.1-cmp-1", "infographic row");
+        com.tcs.contentGenerator.design.ImageBox shapeB = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-2", ComponentRole.DECORATION, new Frame(20, 40, 260, 20), 1, true,
+                null, "decor-infographic-numberedBars.2-cmp-2", "infographic row");
+        TextBox label = new TextBox("cmp-3", ComponentRole.INFOGRAPHIC_LABEL, new Frame(50, 35, 200, 12), 2, false,
+                null, "Body", "Straddling point");
+        PipelineContext context = contextWith(new Page("page-1", List.of(shapeA, shapeB, label)));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                .anyMatch(f -> f.category().equals("INFOGRAPHIC_TEXT_STRADDLES_SHAPES")
+                        && f.componentId().equals("cmp-3")));
+    }
+
+    @Test
+    void flagsTwoInfographicShapesThatOverlapEachOther() {
+        com.tcs.contentGenerator.design.ImageBox shapeA = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-1", ComponentRole.DECORATION, new Frame(20, 20, 260, 30), 0, true,
+                null, "decor-infographic-numberedBars.1-cmp-1", "infographic row");
+        com.tcs.contentGenerator.design.ImageBox shapeB = new com.tcs.contentGenerator.design.ImageBox(
+                "cmp-2", ComponentRole.DECORATION, new Frame(20, 40, 260, 30), 1, true,
+                null, "decor-infographic-numberedBars.2-cmp-2", "infographic row");
+        PipelineContext context = contextWith(new Page("page-1", List.of(shapeA, shapeB)));
+
+        agent(llmReturning(new EditorialCheck[0])).execute(context);
+
+        assertTrue(context.getReviewReport().findings().stream()
+                .anyMatch(f -> f.category().equals("INFOGRAPHIC_SHAPE_OVERLAP") && f.componentId().equals("cmp-1")));
+    }
+
+    @Test
     void flagsComponentOutsidePageMargins() {
         TextBox body = new TextBox("cmp-1", ComponentRole.ARTICLE_BODY, new Frame(0, 20, 100, 20), 0, false,
                 null, "Body", "Sits past the left margin.");

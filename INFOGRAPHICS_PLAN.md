@@ -218,14 +218,30 @@ export-faithful in PPTX/PDF where SVG text support is weakest.
 
 ## 6. Piece 5 — Guardrails (Agent #9 + layout-time checks)
 
-1. **Layout-time fit check (primary):** before committing the infographic,
-   `LayoutEngine` measures each point's text (`TextMeasurer`) against its
-   slot. Overflow → `DesignCompositionAgent` retries with the next candidate
-   from §4's list; list exhausted → `STANDARD`. The char-capacity filter
-   makes this rare; the measurement makes it impossible to ship clipped text.
-2. **`LayoutLint` check (backstop):** new lint — text box overlapping the
-   infographic's shape regions or overflowing its frame → `ReviewFinding`,
-   same severity flow as existing lints.
+1. **Layout-time fit check — superseded by construction (checked 2026-07-20):**
+   every `layoutInfographic` helper (`layoutBarRows`, `layoutCardGrid`,
+   `layoutTimeline`, `layoutCycle`, `layoutHubSpoke`, `layoutSplitVisual` in
+   `LayoutEngine`) already sizes each row/card's `Frame` *from* the same
+   `TextMeasurer.heightOf` call it then places the text into — the box always
+   grows to fit, so there is no fixed slot to overflow against and nothing to
+   retry. The originally-planned "measure → retry next candidate" loop turned
+   out to target a failure mode that can't occur; not built, and the
+   char-capacity filter (Phase 3) remains the only pre-layout guard.
+2. **`LayoutLint` check (backstop) — DONE (2026-07-20):** `LayoutLint
+   .checkInfographicShapes` — every `INFOGRAPHIC_LABEL`/`INFOGRAPHIC_TEXT` box
+   must overlap exactly one infographic-painted `DECORATION` image (matched by
+   its `decor-infographic-` asset-id prefix) and sit fully inside that
+   image's frame; zero matches → `INFOGRAPHIC_TEXT_UNANCHORED`, more than one
+   → `INFOGRAPHIC_TEXT_STRADDLES_SHAPES`, contained-but-not-quite →
+   `INFOGRAPHIC_TEXT_OUTSIDE_SHAPE` (0.5pt rounding tolerance); infographic
+   shapes overlapping each other → `INFOGRAPHIC_SHAPE_OVERLAP`. All HIGH,
+   same `ReviewFinding`/severity-score flow as the existing lints. Needed
+   because the generic `checkOverlaps` exempts every `DECORATION` component
+   outright (by design, so masthead/footer bands and — legitimately —
+   infographic text sitting on its own shape aren't flagged as noise); this
+   is the narrower check that closes that blind spot without reopening it.
+   Five new tests in `ReviewAgentTest` (clean fit, unanchored, straddling,
+   outside-shape, shape-vs-shape overlap); full suite 170/170 green.
 3. **Decor failure isolation:** unknown/failed spec → decor asset simply not
    attached (existing behavior), section still shows its text content.
 
@@ -242,7 +258,7 @@ export-faithful in PPTX/PDF where SVG text support is weakest.
 | **4b-i** | `TIMELINE` (`timelineNode` painter: vertical connector + numbered node, text alternating left/right — the zigzag look) | one more archetype live | ✅ DONE 2026-07-11 |
 | **4b-ii** | `CYCLE` (`donutRing` painter: N alternating wedges as one ring image + `cycleSwatch` per-point legend rows below) | one more archetype live | ✅ DONE 2026-07-11 |
 | **4b-iii** | `HUB_SPOKE` (`hubWheel` painter: hub circle + spokes to numbered satellites, one image for the set + `hubSwatch` legend rows, mirrors `CYCLE`'s ring/legend split) + `SPLIT_VISUAL` (`splitCard` painter: same rounded-card-with-badge as `pointCard`, routed through a dedicated two-column layout — article prose left, stacked cards right) | remaining two archetypes live, 7/7 | ✅ DONE 2026-07-20 |
-| **5** | Fit-check retry loop + `LayoutLint` rule + per-point icon matching *(char-capacity filter shipped in Phase 3; measurement retry pending)* | quality floor | partial |
+| **5** | Fit-check retry loop + `LayoutLint` rule + per-point icon matching *(char-capacity filter shipped in Phase 3; `LayoutLint` infographic rule shipped 2026-07-20 — see below; fit-check retry loop found moot on inspection, boxes already grow-to-fit; per-point icon matching still pending)* | quality floor | partial |
 
 Each phase leaves the pipeline green: until Phase 3 wires selection in, no
 production section renders differently.

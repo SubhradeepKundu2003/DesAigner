@@ -3,11 +3,13 @@ package com.tcs.contentGenerator.agent.review;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.tcs.contentGenerator.agent.design.layout.LayoutEngine;
 import com.tcs.contentGenerator.agent.design.layout.TextMeasurer;
 import com.tcs.contentGenerator.design.Component;
 import com.tcs.contentGenerator.design.ComponentRole;
 import com.tcs.contentGenerator.design.DesignDocument;
 import com.tcs.contentGenerator.design.Frame;
+import com.tcs.contentGenerator.design.ImageBox;
 import com.tcs.contentGenerator.design.Page;
 import com.tcs.contentGenerator.design.ShapeBox;
 import com.tcs.contentGenerator.design.TextBox;
@@ -16,17 +18,22 @@ import com.tcs.contentGenerator.design.Theme;
 
 /**
  * Deterministic, LLM-free pass over a positioned {@link DesignDocument}: text
- * overflow, frame overlaps, margin violations, low text-on-fill contrast, and
- * a section title orphaned at the bottom of a page. Reuses the same
- * {@link TextMeasurer} estimate the layout engine itself measures with, so a
- * finding here means the same yardstick that laid the page out now disagrees
- * with it (e.g. an editor shrank a frame in a later hand-edit).
+ * overflow, frame overlaps, margin violations, low text-on-fill contrast, an
+ * infographic point straying off its painted shape, and a section title
+ * orphaned at the bottom of a page. Reuses the same {@link TextMeasurer}
+ * estimate the layout engine itself measures with, so a finding here means
+ * the same yardstick that laid the page out now disagrees with it (e.g. an
+ * editor shrank a frame in a later hand-edit).
  */
 public class LayoutLint {
 
     private static final TextStyle DEFAULT_STYLE = new TextStyle("SansSerif", 10, "normal", "text", 14);
     /** How far down a page a section title has to sit to count as "at the bottom". */
     private static final double ORPHAN_ZONE_FRACTION = 0.75;
+    /** Marks a DECORATION image as one of {@code InfographicPainter}'s painted shapes. */
+    private static final String INFOGRAPHIC_ASSET_PREFIX = LayoutEngine.DECOR_ASSET_PREFIX + "infographic-";
+    /** Rounding slack for the shape-containment check, in points. */
+    private static final double SHAPE_CONTAINMENT_TOLERANCE_PT = 0.5;
 
     private final TextMeasurer measurer = new TextMeasurer();
     private final double contrastRatioThreshold;
@@ -48,6 +55,7 @@ public class LayoutLint {
             findings.addAll(checkMargins(components, theme));
             findings.addAll(checkOverlaps(components));
             findings.addAll(checkContrast(components, theme));
+            findings.addAll(checkInfographicShapes(components));
             findings.addAll(checkOrphanedHeader(components, theme));
         }
         return findings;
@@ -150,6 +158,54 @@ public class LayoutLint {
         return out;
     }
 
+    /**
+     * Backstop for the hybrid "painted shape + real text on top" infographic
+     * rendering ({@code InfographicPainter}): every point's label/one-liner is
+     * placed against the same row/card/legend-swatch frame its painted
+     * DECORATION image uses, so under correct geometry each text box overlaps
+     * exactly one infographic shape and sits fully inside it. The generic
+     * {@link #checkOverlaps} can't catch a regression here — it exempts all
+     * DECORATION components outright, since that exemption is also what lets
+     * infographic text legitimately sit on top of its own shape.
+     */
+    private List<ReviewFinding> checkInfographicShapes(List<Component> components) {
+        List<ReviewFinding> out = new ArrayList<>();
+        List<ImageBox> shapes = new ArrayList<>();
+        for (Component c : components) {
+            if (c instanceof ImageBox img && img.role() == ComponentRole.DECORATION
+                    && img.assetId() != null && img.assetId().startsWith(INFOGRAPHIC_ASSET_PREFIX)) {
+                shapes.add(img);
+            }
+        }
+        for (int i = 0; i < shapes.size(); i++) {
+            for (int j = i + 1; j < shapes.size(); j++) {
+                if (overlaps(shapes.get(i).frame(), shapes.get(j).frame())) {
+                    out.add(new ReviewFinding(FindingSource.LAYOUT, "INFOGRAPHIC_SHAPE_OVERLAP", FindingSeverity.HIGH,
+                            shapes.get(i).id(), "Overlaps infographic shape " + shapes.get(j).id() + "."));
+                }
+            }
+        }
+        for (Component c : components) {
+            if (!(c instanceof TextBox box)
+                    || (box.role() != ComponentRole.INFOGRAPHIC_LABEL
+                            && box.role() != ComponentRole.INFOGRAPHIC_TEXT)) {
+                continue;
+            }
+            List<ImageBox> owners = shapes.stream().filter(s -> overlaps(s.frame(), box.frame())).toList();
+            if (owners.isEmpty()) {
+                out.add(new ReviewFinding(FindingSource.LAYOUT, "INFOGRAPHIC_TEXT_UNANCHORED", FindingSeverity.HIGH,
+                        box.id(), "Infographic point text has no painted shape behind it."));
+            } else if (owners.size() > 1) {
+                out.add(new ReviewFinding(FindingSource.LAYOUT, "INFOGRAPHIC_TEXT_STRADDLES_SHAPES",
+                        FindingSeverity.HIGH, box.id(), "Infographic point text overlaps more than one shape."));
+            } else if (!contains(owners.get(0).frame(), box.frame())) {
+                out.add(new ReviewFinding(FindingSource.LAYOUT, "INFOGRAPHIC_TEXT_OUTSIDE_SHAPE",
+                        FindingSeverity.HIGH, box.id(), "Infographic point text spills outside its shape's frame."));
+            }
+        }
+        return out;
+    }
+
     /** A section title left as the last thing on a page has had its content pushed to the next page. */
     private List<ReviewFinding> checkOrphanedHeader(List<Component> components, Theme theme) {
         // trailing decorations (the footer band is appended last) don't count as content
@@ -201,6 +257,14 @@ public class LayoutLint {
     private static boolean overlaps(Frame a, Frame b) {
         return a.x() < b.x() + b.w() && a.x() + a.w() > b.x()
                 && a.y() < b.y() + b.h() && a.y() + a.h() > b.y();
+    }
+
+    private static boolean contains(Frame outer, Frame inner) {
+        double tol = SHAPE_CONTAINMENT_TOLERANCE_PT;
+        return inner.x() >= outer.x() - tol
+                && inner.y() >= outer.y() - tol
+                && inner.x() + inner.w() <= outer.x() + outer.w() + tol
+                && inner.y() + inner.h() <= outer.y() + outer.h() + tol;
     }
 
     /** WCAG 2.x contrast ratio between two hex colors, (lighter+0.05)/(darker+0.05). */
