@@ -104,7 +104,10 @@ public class ContentGenerationAgent implements Agent {
                             item.keyMetrics().isEmpty() ? "none"
                                     : String.join("; ", item.keyMetrics())));
             GeneratedArticle article = parse(raw, item.title(), item.summary(), planned);
-            log.info("[{}] wrote article \"{}\"", section.title(), article.headline());
+            log.info("[{}] wrote article \"{}\" ({} point(s){})", section.title(), article.headline(),
+                    article.points().size(),
+                    article.points().isEmpty() ? "" : ": " + article.points().stream()
+                            .map(GeneratedArticle.Point::label).toList());
             return article;
         } catch (Exception e) {
             log.warn("[{}] generation failed for \"{}\", using extracted text: {}",
